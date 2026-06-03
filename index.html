@@ -2313,24 +2313,7 @@ function exportData(){
   const data={students,attendance,attNotes,exportedAt:new Date().toISOString(),version:'4'};
   const json=JSON.stringify(data,null,2);
   const tgl=new Date().toLocaleDateString('id-ID',{day:'2-digit',month:'2-digit',year:'numeric'}).replace(/\//g,'-');
-  localStorage.setItem('rms4_lastbackup',Date.now());
-
-  // Coba Android Share Sheet (paling reliable di APK)
-  if(navigator.share){
-    navigator.share({
-      title:'LLK Backup '+tgl,
-      text:json
-    }).then(()=>{
-      toast('✅ Backup berhasil dibagikan!');
-      setTimeout(renderLainnya,800);
-    }).catch(()=>{
-      // User cancel atau gagal, tampilkan fallback
-      showBackupText(json, tgl);
-    });
-    return;
-  }
-
-  // Fallback: tampilkan teks untuk di-copy
+  // Langsung tampilkan halaman backup — jangan share dulu
   showBackupText(json, tgl);
 }
 
