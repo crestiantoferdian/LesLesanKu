@@ -886,16 +886,34 @@ window.addEventListener('popstate',function(e){
     closeRescheduleModal(); history.pushState({tab:currentTab,view:'main'},''); return;
   }
 
-  // 2. Kembali dari halaman detail murid
+  // 2. Kembali dari halaman detail murid (track)
   if(viewingStudent){
-    viewingStudent=null; renderTrack();
+    viewingStudent=null;
+    currentTab='track';
+    renderTrack();
     history.pushState({tab:'track',view:'main'},''); return;
   }
 
-  // 3. Kembali dari sub-halaman (backup, import, pengaturan)
+  // 2b. Kembali dari profil siswa
+  if(window._profileName){
+    const backTo = state.profileFrom || state.tab || window._profileFrom || 'siswa';
+    window._profileName = null;
+    window._profileFrom = null;
+    currentTab = backTo;
+    render();
+    history.pushState({tab:currentTab,view:'main'},''); return;
+  }
+
+  // 3. Kembali dari sub-halaman (backup, import, pengaturan, delete confirm)
+  const dc=document.getElementById('deleteConfirmOverlay');
+  if(dc&&dc.classList.contains('open')){
+    closeDeleteConfirm();
+    history.pushState({tab:currentTab,view:'main'},''); return;
+  }
   const mc=document.getElementById('mainContent');
   if(state.view==='sub'||(mc&&mc.querySelector('.hist-back'))){
-    currentTab=state.tab||'absensi'; render();
+    currentTab=state.tab||'absensi';
+    render();
     history.pushState({tab:currentTab,view:'main'},''); return;
   }
 
@@ -1595,8 +1613,10 @@ function renderSiswaList(){
 function openStudentReport(el, from){
   const name = typeof el === 'string' ? el : (el.dataset && el.dataset.name ? el.dataset.name : el.textContent.trim());
   window._profileName = name;
-  window._profileFrom = from || 'siswa'; // 'siswa' or 'absensi'
+  window._profileFrom = from || 'siswa';
   window._profilePeriod = 'all';
+  const fromTab = from || currentTab || 'siswa';
+  history.pushState({tab:fromTab, view:'sub', profile:name, profileFrom:fromTab},'');
   renderStudentProfile(name, window._profilePeriod);
 }
 
@@ -2997,7 +3017,7 @@ function openSheetLink(idx){
 
   const dateKey=window._sheetDateKey||window._currentDateKey||todayStr();
   window._sheetDateKey=null;
-  const sentKey='sheet_sent_'+dateKey+'_'+idx;
+  const sentKey='sheet_sent_'+dateKey+'_'+(s.name||idx).replace(/[^a-zA-Z0-9]/g,'_');
   const alreadySent=localStorage.getItem(sentKey);
 
   const old=document.getElementById('sheetPopup');
@@ -3094,7 +3114,7 @@ function renderFormRescheduleList(s){
 
 // ── DELETE ATTENDANCE ────────────────────────────────────
 function deleteAttendance(name, dk){
-  // Simpan untuk dipakai di konfirmasi
+  history.pushState({tab:currentTab, view:'modal'},'');
   window._pendingDelete = {name, dk};
   document.getElementById('deleteConfirmName').textContent = name;
   document.getElementById('deleteConfirmDate').textContent = fmtPretty(dk);
