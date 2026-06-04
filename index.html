@@ -1024,24 +1024,32 @@ function renderAbsensi(){
     const hasActiveReschedule=!isRescued&&!!(s._hasActiveReschedule);
     const rsInfo=s._rsInfo||null;
     const rescueDateFmt=rsInfo?(()=>{const d=new Date(rsInfo.date+'T00:00:00');const days=['Min','Sen','Sel','Rab','Kam','Jum','Sab'];return days[d.getDay()]+', '+d.getDate()+'/'+(d.getMonth()+1);})():'';
-    // Efek visual untuk izin
+    // Efek visual untuk izin & alpa
     const isIzin=status==='izin';
+    const isAlpa=status==='alpa';
     const izinReason=note.reason||'';
+    const alpaReason=note.reason||'';
     // Tentukan border, badge, warna
-    const borderLeft=hasActiveReschedule?'border-left:3px solid #f59e0b;':isIzin?'border-left:3px solid #f97316;':'';
-    const avatarOpacity=hasActiveReschedule||isIzin?'opacity:0.5;':'';
+    const borderLeft=hasActiveReschedule?'border-left:3px solid #f59e0b;'
+      :isIzin?'border-left:3px solid #f97316;'
+      :isAlpa?'border-left:3px solid #dc2626;':'';
+    const avatarOpacity=hasActiveReschedule||isIzin||isAlpa?'opacity:0.5;':'';
     const badgeHtml=hasActiveReschedule
       ?'<div style="position:absolute;bottom:-2px;right:-2px;width:14px;height:14px;background:#f59e0b;border-radius:50%;font-size:9px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:900;border:1.5px solid #fff">!</div>'
       :isIzin
       ?'<div style="position:absolute;bottom:-2px;right:-2px;width:14px;height:14px;background:#f97316;border-radius:50%;font-size:9px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:900;border:1.5px solid #fff">✋</div>'
+      :isAlpa
+      ?'<div style="position:absolute;bottom:-2px;right:-2px;width:14px;height:14px;background:#dc2626;border-radius:50%;font-size:9px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:900;border:1.5px solid #fff">✗</div>'
       :'';
-    const nameColor=hasActiveReschedule||isIzin?'color:var(--muted);':'';
-    const timeColor=hasActiveReschedule?'#f59e0b':isIzin?'#f97316':'var(--blue)';
-    const timeDecor=hasActiveReschedule||isIzin?';text-decoration:line-through':'';
+    const nameColor=hasActiveReschedule||isIzin||isAlpa?'color:var(--muted);':'';
+    const timeColor=hasActiveReschedule?'#f59e0b':isIzin?'#f97316':isAlpa?'#dc2626':'var(--blue)';
+    const timeDecor=hasActiveReschedule||isIzin||isAlpa?';text-decoration:line-through':'';
     const infoRow=hasActiveReschedule
       ?`<div style="font-size:0.72rem;color:#d97706;font-weight:700;margin-top:3px;display:flex;align-items:center;gap:4px">🔄 Pindah ke <b>${rescueDateFmt}</b>${rsInfo&&rsInfo.time?' · '+rsInfo.time+(rsInfo.time2?'–'+rsInfo.time2:''):''}</div>`
       :isIzin
       ?`<div style="font-size:0.72rem;color:#ea580c;font-weight:700;margin-top:3px;display:flex;align-items:center;gap:4px">✋ Izin${izinReason?' · <span style="font-weight:400">'+izinReason+'</span>':''}</div>`
+      :isAlpa
+      ?`<div style="font-size:0.72rem;color:#dc2626;font-weight:700;margin-top:3px;display:flex;align-items:center;gap:4px">✗ Alpa${alpaReason?' · <span style="font-weight:400">'+alpaReason+'</span>':''}</div>`
       :'';
     return `<div class="s-item status-${status}" id="sitem-${attKey.replace(/[^a-zA-Z0-9]/g,'_')}" onclick="toggleSItem(this)" style="cursor:pointer;${borderLeft}">
       <div class="s-avatar ${isVokal?'vocal':''}" style="${avatarOpacity}">
@@ -1056,7 +1064,7 @@ function renderAbsensi(){
           <div class="s-time-row" style="margin-top:0;flex-shrink:0;text-align:right"><span style="color:${timeColor}${timeDecor}">${timeRange}</span></div>
         </div>
         ${infoRow}
-        <div class="s-pills" style="margin-top:${hasActiveReschedule||isIzin?2:5}px">
+        <div class="s-pills" style="margin-top:${hasActiveReschedule||isIzin||isAlpa?2:5}px">
           ${isRescued?`<span class="s-pill rescue-pill">🔄 Reschedule</span>`:''}
           ${s._isExtra?`<span class="s-pill" style="background:#eef2ff;color:var(--blue);border-color:rgba(37,99,235,0.3)">➕ ${s._extraNote||'Tambahan Kelas'}</span>`:''}
         </div>
