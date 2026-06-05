@@ -2151,10 +2151,13 @@ function renderKirim(){
   const tgl=new Date().toLocaleDateString('id-ID',{day:'numeric',month:'numeric',year:'numeric'}).replace(/\//g,'/');
   const hariName=todayName;
 
-  // Filter hanya Hadir dan Alpa
+  // Filter hanya Hadir dan Alpa (termasuk reschedule & extra)
   const rows=[];
   dayS.forEach(s=>{
-    const st=att[s.name]||'belum';
+    const attKey=s._attKey||s.name;
+    const attDateKey=s._extraDate||dateKey;
+    const attForDate=attendance[attDateKey]||{};
+    const st=attForDate[attKey]||'belum';
     if(st==='hadir'||st==='alpa') rows.push({s,st});
   });
 
