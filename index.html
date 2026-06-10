@@ -1229,11 +1229,9 @@ function getStudentsForDay(dayName, dateKey){
         // Get day name of this extra date
         const edDay=new Date(ed.date+'T00:00:00').getDay();
         const edDayName=DAYS[DAYS_JS.indexOf(edDay)];
-        // Only show on the correct day tab
+        // Hanya tampilkan pada tab hari yang benar DAN tanggal yang tepat
         if(edDayName!==dayName) return;
-        // Hanya hide jika melihat hari ini dan tanggal sudah lewat
-        // (untuk hari lain tetap tampilkan agar bisa input izin retroaktif)
-        if(ed.date<dateKey) return;
+        if(ed.date!==dateKey) return; // harus persis tanggal yang sedang dilihat
         const extraAttKey=s.name+'_extra_'+ei;
         result.push(Object.assign({},s,{
           time:ed.time||s.time,
