@@ -1984,6 +1984,7 @@ function buildDateDetail(dk){
 function refreshTrackCards(){
   document.getElementById('trackCards').innerHTML=buildTrackCards();
   const {totalHadir,totalAlpa}=calcTrackTotals();
+  // Hitung total sesi hadir + alpa di periode ini
   const badge=document.getElementById('trackTotalBadge');
   if(badge) badge.textContent=totalHadir+totalAlpa;
 }
@@ -2012,9 +2013,17 @@ function calcTrackTotals(){
       const isDay4=s.day4&&s.day4===dayName;
       const isRescheduleDate2=(s.reschedules||[]).some(r=>r.date===dk);
       if(dayName!==s.day&&!hasExtra&&!isDay2&&!isDay3&&!isDay4&&!isRescheduleDate2) return;
+      // Sesi reguler
       const st=dayAtt[s.name];
       if(st==='hadir') totalHadir++;
       else if(st==='alpa') totalAlpa++;
+      // Sesi extra (key: name_extra_N)
+      if(s.extraDates) s.extraDates.forEach((ed,ei)=>{
+        if(ed.date!==dk) return;
+        const est=dayAtt[s.name+'_extra_'+ei];
+        if(est==='hadir') totalHadir++;
+        else if(est==='alpa') totalAlpa++;
+      });
     });
   });
   return {totalHadir,totalAlpa};
