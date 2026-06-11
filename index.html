@@ -798,42 +798,65 @@ checkNotifications();
 let notifTimer;
 
 // Play a gentle 3-tone chime using Web Audio API (no external file needed)
+// Nada-nada tersedia
+const NOTIF_SOUNDS={
+  'chime':   {label:'🎵 Chime (default)', tones:[523.25,659.25,783.99], type:'sine',   vol:0.35, dur:0.55, gap:0.18, repeat:true},
+  'bell':    {label:'🔔 Bell Keras',      tones:[880,1108,1318],        type:'sine',   vol:0.8,  dur:0.8,  gap:0.2,  repeat:true},
+  'ding':    {label:'🔊 Ding Keras',      tones:[1046.5],               type:'sine',   vol:0.9,  dur:1.0,  gap:0,    repeat:true},
+  'alert':   {label:'⚡ Alert Tegas',     tones:[440,440],              type:'square', vol:0.6,  dur:0.3,  gap:0.1,  repeat:false},
+  'horn':    {label:'📣 Horn Nyaring',    tones:[349.23,392,440,523.25],type:'sawtooth',vol:0.7, dur:0.4,  gap:0.15, repeat:false},
+  'custom':  {label:'🎶 MP3 dari HP',     tones:[],                     type:'sine',   vol:1.0,  dur:0,    gap:0,    repeat:false},
+  'off':     {label:'🔕 Mati',            tones:[],                     type:'sine',   vol:0,    dur:0,    gap:0,    repeat:false},
+};
+
+function getNotifSetting(){
+  return {
+    sound: localStorage.getItem('llk_notif_sound')||'chime',
+    volume: parseFloat(localStorage.getItem('llk_notif_volume')||'1.0'),
+    customMp3: localStorage.getItem('llk_notif_custom_mp3')||'',
+    customName: localStorage.getItem('llk_notif_custom_name')||'',
+  };
+}
+
 function playNotifSound(){
+  const {sound, volume, customMp3} = getNotifSetting();
+  // Custom MP3
+  if(sound==='custom' && customMp3){
+    try{
+      const audio = new Audio(customMp3);
+      audio.volume = volume;
+      audio.play().catch(e=>console.warn('MP3 play failed:',e));
+    }catch(e){ console.warn('Custom MP3 error:',e); }
+    return;
+  }
+  const cfg = NOTIF_SOUNDS[sound]||NOTIF_SOUNDS['chime'];
+  if(!cfg.tones.length) return; // mati
   try{
     const ctx=new (window.AudioContext||window.webkitAudioContext)();
-    const tones=[523.25, 659.25, 783.99]; // C5, E5, G5
-    tones.forEach((freq,i)=>{
-      const osc=ctx.createOscillator();
-      const gain=ctx.createGain();
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.type='sine';
-      osc.frequency.value=freq;
-      const start=ctx.currentTime+i*0.18;
-      gain.gain.setValueAtTime(0,start);
-      gain.gain.linearRampToValueAtTime(0.35,start+0.04);
-      gain.gain.exponentialRampToValueAtTime(0.001,start+0.55);
-      osc.start(start);
-      osc.stop(start+0.6);
-    });
-    // Second repeat after 0.9s
-    setTimeout(()=>{
-      tones.forEach((freq,i)=>{
-        const osc2=ctx.createOscillator();
-        const gain2=ctx.createGain();
-        osc2.connect(gain2);
-        gain2.connect(ctx.destination);
-        osc2.type='sine';
-        osc2.frequency.value=freq;
-        const start=ctx.currentTime+i*0.18;
-        gain2.gain.setValueAtTime(0,start);
-        gain2.gain.linearRampToValueAtTime(0.35,start+0.04);
-        gain2.gain.exponentialRampToValueAtTime(0.001,start+0.55);
-        osc2.start(start);
-        osc2.stop(start+0.6);
+    const masterVol = cfg.vol * volume;
+    function playTones(){
+      cfg.tones.forEach((freq,i)=>{
+        const osc=ctx.createOscillator();
+        const gain=ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.type=cfg.type;
+        osc.frequency.value=freq;
+        const start=ctx.currentTime+i*cfg.gap;
+        gain.gain.setValueAtTime(0,start);
+        gain.gain.linearRampToValueAtTime(masterVol,start+0.04);
+        gain.gain.exponentialRampToValueAtTime(0.001,start+cfg.dur);
+        osc.start(start);
+        osc.stop(start+cfg.dur+0.05);
       });
-    },900);
+    }
+    playTones();
+    if(cfg.repeat) setTimeout(playTones, 900);
   }catch(e){console.warn('Audio not supported:',e);}
+}
+
+function testNotifSound(){
+  playNotifSound();
 }
 
 function showNotif(title,sub){
@@ -2284,6 +2307,11 @@ function renderLainnya(){
         </div>
       </div>
       <div class="menu-card">
+        <div class="menu-item" onclick="renderNotifSettings()">
+          <div class="menu-icon" style="background:#fff3cd">🔔</div>
+          <div class="menu-text"><div class="menu-label">Pengaturan Notifikasi</div><div class="menu-desc">Ganti suara & volume notifikasi jadwal</div></div>
+          <div class="menu-arrow">›</div>
+        </div>
         <div class="menu-item" onclick="renderPengaturan()">
           <div class="menu-icon" style="background:#f3e8ff">⚙️</div>
           <div class="menu-text"><div class="menu-label">Pengaturan Aplikasi</div><div class="menu-desc">Ubah nama, logo, dan warna tema</div></div>
@@ -2787,6 +2815,101 @@ function doDelete(){
   students.splice(editIdx,1);
   save();closeModal();render();
   toast('🗑 '+name+' dihapus');
+}
+
+// ── PENGATURAN NOTIFIKASI ──────────────────────────────
+function renderNotifSettings(){
+  history.pushState({tab:'lainnya', view:'sub'},'');
+  const {sound, volume} = getNotifSetting();
+  const {customName} = getNotifSetting();
+  const soundOptions = Object.entries(NOTIF_SOUNDS).map(([k,v])=>{
+    const isActive = sound===k;
+    const extraHtml = (k==='custom'&&isActive)
+      ? `<div style="margin-top:10px">
+          <div style="font-size:0.75rem;color:var(--muted);margin-bottom:6px">${customName?'File: <b>'+customName+'</b>':'Belum ada file dipilih'}</div>
+          <button onclick="pickCustomMp3();event.stopPropagation()" style="padding:8px 16px;border-radius:8px;border:1.5px solid var(--red);background:#fff5f5;color:var(--red);font-family:sans-serif;font-size:0.82rem;font-weight:700;cursor:pointer">
+            📁 Pilih File MP3
+          </button>
+          <input type="file" id="mp3FileInput" accept="audio/*" style="display:none" onchange="loadCustomMp3(this)">
+        </div>`
+      : '';
+    return `<div onclick="selectNotifSound('${k}')" id="nsound-${k}"
+      style="padding:12px 14px;border-radius:12px;border:1.5px solid ${isActive?'var(--red)':'var(--border)'};background:${isActive?'#fff5f5':'var(--card)'};cursor:pointer;margin-bottom:8px;transition:all 0.15s">
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <span style="font-size:0.88rem;font-weight:${isActive?'700':'500'};color:${isActive?'var(--red)':'var(--text)'}">${v.label}</span>
+        ${isActive?'<span style="color:var(--red);font-weight:700">✓</span>':''}
+      </div>
+      ${extraHtml}
+    </div>`;
+  }).join('');
+
+  document.getElementById('mainContent').innerHTML=`
+    <div class="page-title-area">
+      <div class="hist-back" onclick="renderLainnya()"><span>‹</span><div class="hist-back-label">Kembali</div></div>
+      <div class="page-title" style="margin-top:8px">Pengaturan Notifikasi</div>
+      <div class="page-sub">Atur suara dan volume notifikasi jadwal les.</div>
+    </div>
+    <div style="padding:0 16px 24px">
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:16px;margin-bottom:16px">
+        <div style="font-size:0.72rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:12px">Pilih Suara</div>
+        ${soundOptions}
+      </div>
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:16px;margin-bottom:16px">
+        <div style="font-size:0.72rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px">Volume</div>
+        <div style="display:flex;align-items:center;gap:12px;margin-top:12px">
+          <span style="font-size:1.2rem">🔈</span>
+          <input type="range" id="notifVolume" min="0.1" max="1" step="0.1" value="${volume}"
+            oninput="document.getElementById('volLabel').textContent=Math.round(this.value*100)+'%'"
+            onchange="localStorage.setItem('llk_notif_volume',this.value)"
+            style="flex:1;accent-color:var(--red)">
+          <span style="font-size:1.2rem">🔊</span>
+          <span id="volLabel" style="font-size:0.85rem;font-weight:700;color:var(--text);min-width:36px">${Math.round(volume*100)}%</span>
+        </div>
+      </div>
+      <button onclick="testNotifSound()"
+        style="width:100%;padding:14px;background:var(--red);color:#fff;border:none;border-radius:12px;font-family:sans-serif;font-size:0.9rem;font-weight:700;cursor:pointer">
+        🔔 Tes Suara Sekarang
+      </button>
+    </div>`;
+}
+
+function selectNotifSound(key){
+  localStorage.setItem('llk_notif_sound', key);
+  // Re-render seluruh halaman agar custom picker muncul/hilang
+  renderNotifSettings();
+  // Tes suara (kecuali custom yang belum ada file, dan off)
+  if(key!=='off'){
+    setTimeout(testNotifSound, 200);
+  }
+}
+
+function pickCustomMp3(){
+  const input = document.getElementById('mp3FileInput');
+  if(input) input.click();
+}
+
+function loadCustomMp3(input){
+  const file = input.files[0];
+  if(!file) return;
+  // Cek ukuran file max 5MB
+  if(file.size > 5 * 1024 * 1024){
+    toast('❌ File terlalu besar! Max 5MB');
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = function(e){
+    localStorage.setItem('llk_notif_custom_mp3', e.target.result);
+    localStorage.setItem('llk_notif_custom_name', file.name);
+    localStorage.setItem('llk_notif_sound', 'custom');
+    toast('✅ '+file.name+' dipilih!');
+    renderNotifSettings();
+    setTimeout(testNotifSound, 300);
+  };
+  reader.readAsDataURL(file);
+}
+
+function testNotifSound(){
+  playNotifSound();
 }
 
 // ── PENGATURAN ────────────────────────────────────────
