@@ -1065,7 +1065,9 @@ function renderAbsensi(){
       ?'<div style="position:absolute;bottom:-2px;right:-2px;width:14px;height:14px;background:#dc2626;border-radius:50%;font-size:9px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:900;border:1.5px solid #fff">✗</div>'
       :'';
     const nameColor=hasActiveReschedule||isIzin||isAlpa?'color:var(--muted);':'';
-    const timeColor=hasActiveReschedule?'#f59e0b':isIzin?'#f97316':isAlpa?'#dc2626':'var(--blue)';
+    const timeColor=hasActiveReschedule?'#f59e0b':isIzin?'#f97316':isAlpa?'#dc2626':status==='hadir'?'var(--blue)':'var(--text)';
+    const timeFontSize=status==='belum'?'1.05rem':'1rem';
+    const timeFontWeight=status==='belum'?'800':'700';
     const timeDecor=hasActiveReschedule||isIzin||isAlpa?';text-decoration:line-through':'';
     const infoRow=hasActiveReschedule
       ?`<div style="font-size:0.72rem;color:#d97706;font-weight:700;margin-top:3px;display:flex;align-items:center;gap:4px">🔄 Pindah ke <b>${rescueDateFmt}</b>${rsInfo&&rsInfo.time?' · '+rsInfo.time+(rsInfo.time2?'–'+rsInfo.time2:''):''}</div>`
@@ -1084,7 +1086,7 @@ function renderAbsensi(){
           <div class="s-name" onclick="openStudentReport('${s.name}','absensi');event.stopPropagation()" style="cursor:pointer;text-decoration:underline;text-underline-offset:3px;text-decoration-color:rgba(0,0,0,0.15);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;${nameColor}">
             ${s.name}
           </div>
-          <div class="s-time-row" style="margin-top:0;flex-shrink:0;text-align:right"><span style="color:${timeColor}${timeDecor}">${timeRange}</span></div>
+          <div class="s-time-row" style="margin-top:0;flex-shrink:0;text-align:right"><span style="color:${timeColor}${timeDecor};font-size:${timeFontSize};font-weight:${timeFontWeight}">${timeRange}</span></div>
         </div>
         ${infoRow}
         <div class="s-pills" style="margin-top:${hasActiveReschedule||isIzin||isAlpa?2:5}px">
@@ -3167,11 +3169,18 @@ function openSheetLink(idx){
         user-select:all;-webkit-user-select:all;
       ">${dateText}</div>
       ${alreadySent?`<div style="font-size:0.78rem;color:var(--hadir);margin-bottom:12px;font-weight:600;text-align:center">✅ Sudah dikirim hari ini</div>`:''}
-      <button onclick="goToSheet(${idx},'${link}','${sentKey}')" style="
-        width:100%;padding:15px;border-radius:14px;border:none;
-        background:var(--red);color:#fff;
-        font-family:'DM Sans',sans-serif;font-size:1rem;font-weight:700;cursor:pointer;margin-bottom:10px;
-      ">📤 Buka Sheet</button>
+      <div style="display:flex;gap:10px;margin-bottom:10px">
+        <button onclick="goToSheet('${link}')" style="
+          flex:1;padding:15px;border-radius:14px;border:none;
+          background:var(--red);color:#fff;
+          font-family:'DM Sans',sans-serif;font-size:0.95rem;font-weight:700;cursor:pointer;
+        ">📤 Buka Sheet</button>
+        <button onclick="markSheetSent(${idx},'${sentKey}')" style="
+          flex:1;padding:15px;border-radius:14px;border:none;
+          background:var(--hadir);color:#fff;
+          font-family:'DM Sans',sans-serif;font-size:0.95rem;font-weight:700;cursor:pointer;
+        ">✅ Sudah Tercatat</button>
+      </div>
       <button onclick="document.getElementById('sheetPopup').remove()" style="
         width:100%;padding:13px;border-radius:14px;border:1.5px solid var(--border);
         background:transparent;color:var(--muted);
@@ -3182,15 +3191,21 @@ function openSheetLink(idx){
   document.body.appendChild(popup);
 }
 
-function goToSheet(idx,link,sentKey){
+function goToSheet(link){
+  // Hanya buka link, TIDAK menandai sebagai sudah tercatat
+  window.open(link,'_blank');
+}
+
+function markSheetSent(idx,sentKey){
   localStorage.setItem(sentKey,'1');
-  document.getElementById('sheetPopup').remove();
+  const popup=document.getElementById('sheetPopup');
+  if(popup) popup.remove();
   document.querySelectorAll('.sheet-btn-'+idx).forEach(btn=>{
     btn.style.background='#eafaf1';
     btn.style.borderColor='rgba(29,158,78,0.4)';
     btn.textContent='✅';
   });
-  window.open(link,'_blank');
+  toast('✅ Ditandai sudah tercatat');
 }
 
 // ── TOAST ─────────────────────────────────────────────
