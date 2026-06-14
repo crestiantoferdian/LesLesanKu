@@ -721,6 +721,25 @@ function loadStorage(){
   applySettings();
 }
 
+function darkenColor(hex, amount){
+  hex = hex.replace('#','');
+  let r = parseInt(hex.substring(0,2),16);
+  let g = parseInt(hex.substring(2,4),16);
+  let b = parseInt(hex.substring(4,6),16);
+  r = Math.max(0, Math.floor(r * (1-amount)));
+  g = Math.max(0, Math.floor(g * (1-amount)));
+  b = Math.max(0, Math.floor(b * (1-amount)));
+  return '#' + [r,g,b].map(x=>x.toString(16).padStart(2,'0')).join('');
+}
+
+function hexToRgba(hex, alpha){
+  hex = hex.replace('#','');
+  const r = parseInt(hex.substring(0,2),16);
+  const g = parseInt(hex.substring(2,4),16);
+  const b = parseInt(hex.substring(4,6),16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
 function applySettings(){
   const name=localStorage.getItem('rms_school_name')||'LesLesanKu';
   const sub=localStorage.getItem('rms_school_sub')||'Aplikasi Manajemen Les';
@@ -741,11 +760,15 @@ function applySettings(){
       elLogo.innerHTML=logo;
     }
   }
-  // Apply color
+  // Apply color (--red2 = darker shade for gradients/shadows)
   document.documentElement.style.setProperty('--red', color);
-  document.documentElement.style.setProperty('--red2', color);
+  document.documentElement.style.setProperty('--red2', darkenColor(color, 0.25));
+  document.documentElement.style.setProperty('--red-glow', hexToRgba(color, 0.25));
   // Update page title
   document.title=name;
+  // Update theme-color meta (status bar Android)
+  const themeMeta=document.querySelector('meta[name="theme-color"]');
+  if(themeMeta) themeMeta.setAttribute('content', color);
 }
 
 // ── DATE HELPERS ──────────────────────────────────────
@@ -940,6 +963,18 @@ window.addEventListener('popstate',function(e){
     history.pushState({tab:currentTab,view:'main'},''); return;
   }
 
+  // 3b. Kembali ke tab lain (misal dari Track/Kalender balik ke Absensi)
+  if(state.tab && state.tab!==currentTab){
+    currentTab=state.tab;
+    viewingStudent=null;
+    ['absensi','siswa','track','kirim','lainnya'].forEach(x=>{
+      const el=document.getElementById('tab-'+x);
+      if(el) el.classList.toggle('active',x===currentTab);
+    });
+    render();
+    history.pushState({tab:currentTab,view:'main'},''); return;
+  }
+
   // 4. Di tab utama — double back untuk keluar
   if(_backPressedOnce){
     // Biarkan keluar (tidak push state)
@@ -1008,12 +1043,15 @@ function renderAbsensi(){
   // Jika hari sudah lewat, arahkan ke Track kalender
   if(isPast){
     document.getElementById('mainContent').innerHTML=
-      `<div class="page-title-area"><div class="page-title">Absensi Harian</div><div class="page-sub">Tandai siswa yang hadir. Catat progress di setiap pertemuan.</div></div>`+
+      `<div class="page-title-area" style="position:relative">
+        <button onclick="goToCalendar()" style="position:absolute;top:10px;right:20px;width:44px;height:44px;border-radius:12px;border:1.5px solid var(--border);background:var(--card);font-size:1.3rem;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:var(--shadow-xs)">📅</button>
+        <div class="page-title">Absensi Harian</div><div class="page-sub">Tandai siswa yang hadir. Catat progress di setiap pertemuan.</div>
+      </div>`+
       dayBarHtml()+
       `<div style="margin:24px 16px;background:var(--card);border:1.5px solid var(--border);border-radius:16px;padding:24px;text-align:center">
         <div style="font-size:2.5rem;margin-bottom:8px">📅</div>
         <div style="font-weight:700;font-size:1rem;margin-bottom:6px">Hari ${selectedDay} sudah lewat</div>
-        <div style="font-size:0.82rem;color:var(--muted);margin-bottom:16px;line-height:1.6">Gunakan tab <b>Track → Per Tanggal</b> untuk input atau lihat absensi hari yang sudah lewat</div>
+        <div style="font-size:0.82rem;color:var(--muted);margin-bottom:16px;line-height:1.6">Gunakan tab <b>Track → Kalender</b> untuk input atau lihat absensi hari yang sudah lewat</div>
         <button onclick="setTab('track')" style="padding:10px 24px;background:var(--red);color:#fff;border:none;border-radius:10px;font-family:sans-serif;font-size:0.88rem;font-weight:700;cursor:pointer">Buka Track →</button>
       </div>`;
     return;
@@ -1107,10 +1145,13 @@ function renderAbsensi(){
         </div>
       </div>
     </div>`;
-  }).join(''):`${isPast?'<div class="empty"><div class="empty-icon">📅</div><div class="empty-t">Hari sudah lewat</div><div class="empty-d">Gunakan tab Track → Per Tanggal untuk absensi hari lalu</div></div>':`<div class="empty"><div class="empty-icon">🎵</div><div class="empty-t">Tidak ada jadwal hari ${selectedDay}</div></div>`}`;
+  }).join(''):`${isPast?'<div class="empty"><div class="empty-icon">📅</div><div class="empty-t">Hari sudah lewat</div><div class="empty-d">Gunakan tab Track → Kalender untuk absensi hari lalu</div></div>':`<div class="empty"><div class="empty-icon">🎵</div><div class="empty-t">Tidak ada jadwal hari ${selectedDay}</div></div>`}`;
 
   document.getElementById('mainContent').innerHTML=
-    `<div class="page-title-area"><div class="page-title">Absensi Harian</div><div class="page-sub">Tandai siswa yang hadir. Catat progress di setiap pertemuan.</div></div>`+
+    `<div class="page-title-area" style="position:relative">
+        <button onclick="goToCalendar()" style="position:absolute;top:10px;right:20px;width:44px;height:44px;border-radius:12px;border:1.5px solid var(--border);background:var(--card);font-size:1.3rem;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:var(--shadow-xs)">📅</button>
+        <div class="page-title">Absensi Harian</div><div class="page-sub">Tandai siswa yang hadir. Catat progress di setiap pertemuan.</div>
+      </div>`+
     dayBarHtml()+
     `<div class="stats-row">
       <div class="stat-card s-hadir"><div class="stat-label">Hadir</div><div class="stat-num">${hadirC}</div></div>
@@ -1800,7 +1841,7 @@ function renderTrack(){
   const modeBar=`
     <div class="track-mode-bar">
       <button class="track-mode-btn ${trackMode==='siswa'?'active':''}" onclick="setTrackMode('siswa')">👤 Per Siswa</button>
-      <button class="track-mode-btn ${trackMode==='tanggal'?'active':''}" onclick="setTrackMode('tanggal')">📅 Per Tanggal</button>
+      <button class="track-mode-btn ${trackMode==='tanggal'?'active':''}" onclick="setTrackMode('tanggal')">📅 Kalender</button>
     </div>`;
 
   if(trackMode==='tanggal'){
@@ -1847,6 +1888,16 @@ function renderTrack(){
       </div>
       <div id="trackCards">${cards}</div>
     </div>`;
+}
+
+function goToCalendar(){
+  currentTab='track';
+  trackMode='tanggal';
+  selectedCalDate=null;
+  calYear=new Date().getFullYear();
+  calMonth=new Date().getMonth();
+  history.pushState({tab:'track', view:'main'},'');
+  render();
 }
 
 function setTrackMode(m){
@@ -1960,6 +2011,7 @@ function buildDateDetail(dk){
           <div style="flex-shrink:0"><span style="${timeStyle}">${s.time}${s.time2?'–'+s.time2:''}</span></div>
         </div>
         ${s._isRescheduled?'<div style="font-size:0.72rem;color:var(--blue);font-weight:600;margin-top:2px">🔄 Reschedule</div>':''}
+        ${s._isExtra?`<div style="margin-top:4px"><span class="s-pill" style="background:#eef2ff;color:var(--blue);border-color:rgba(37,99,235,0.3)">➕ ${s._extraNote||'Tambahan Kelas'}</span></div>`:''}
         ${noteHtml}
         <div class="att-btns" onclick="event.stopPropagation()" style="margin-top:8px">
           <button class="att-btn a-hadir ${status==='hadir'?'on':''}" onclick="openNoteModal('${safeKey}','hadir','${safeName}','${safeDk}');setTimeout(renderTrack,300)">✅</button>
@@ -2527,7 +2579,7 @@ function importData(){
         '<div style="font-size:2.5rem;margin-bottom:8px">📂</div>'+
         '<div style="font-weight:700;margin-bottom:4px">Pilih File Backup</div>'+
         '<div style="font-size:0.78rem;color:#8e8e93;margin-bottom:16px">Format: .txt atau .json</div>'+
-        '<label for="filePickerInput" style="display:inline-block;background:#c0392b;color:#fff;padding:12px 24px;border-radius:12px;font-weight:700;font-size:0.88rem;cursor:pointer">📂 Pilih File</label>'+
+        '<label for="filePickerInput" style="display:inline-block;background:var(--red);color:#fff;padding:12px 24px;border-radius:12px;font-weight:700;font-size:0.88rem;cursor:pointer">📂 Pilih File</label>'+
         '<input type="file" id="filePickerInput" accept=".txt,.json" style="display:none" onchange="readImportFile(this)"/>'+
       '</div>'+
       '<div id="importStatus" style="font-size:0.82rem;color:#8e8e93;text-align:center"></div>'+
@@ -2573,7 +2625,7 @@ function importFromText(){
     '</div>'+
     '<div style="padding:0 16px 16px">'+
       '<textarea id="importText" rows="10" style="width:100%;font-family:monospace;font-size:0.72rem;border:1.5px solid #e5e5ea;border-radius:12px;padding:12px;background:#fff;color:#1c1c1e;resize:none" placeholder="Tempel teks backup di sini..."></textarea>'+
-      '<button onclick="doImportFromText()" style="width:100%;padding:14px;background:#c0392b;color:#fff;border:none;border-radius:12px;font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:0.9rem;font-weight:700;cursor:pointer;margin-top:10px">✅ Pulihkan Data</button>'+
+      '<button onclick="doImportFromText()" style="width:100%;padding:14px;background:var(--red);color:#fff;border:none;border-radius:12px;font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:0.9rem;font-weight:700;cursor:pointer;margin-top:10px">✅ Pulihkan Data</button>'+
     '</div>';
 }
 
@@ -2812,7 +2864,7 @@ function doDelete(){
   if(btn.dataset.confirm!=='yes'){
     btn.dataset.confirm='yes';
     btn.textContent='⚠️ Yakin hapus?';
-    btn.style.background='#c0392b';
+    btn.style.background='var(--red)';
     btn.style.color='#fff';
     setTimeout(()=>{
       btn.dataset.confirm='';
@@ -2931,20 +2983,6 @@ function renderPengaturan(){
   const logo=localStorage.getItem('rms_school_logo')||'LLK';
   const color=localStorage.getItem('rms_school_color')||'#c0392b';
 
-  const colors=[
-    {name:'Merah (default)',val:'#c0392b'},
-    {name:'Biru Tua',val:'#1a56db'},
-    {name:'Hijau',val:'#057a55'},
-    {name:'Ungu',val:'#7e3af2'},
-    {name:'Orange',val:'#d03801'},
-    {name:'Abu Gelap',val:'#374151'},
-    {name:'Hitam',val:'#111827'},
-  ];
-
-  const colorOptions=colors.map(col=>
-    `<option value="${col.val}" ${color===col.val?'selected':''}>${col.name}</option>`
-  ).join('');
-
   document.getElementById('mainContent').innerHTML=`
     <div class="page-title-area">
       <div class="hist-back" onclick="renderLainnya()"><span>‹</span><div class="hist-back-label">Kembali</div></div>
@@ -3002,11 +3040,15 @@ function renderPengaturan(){
         </div>
 
         <div style="padding:14px 16px">
-          <div style="font-size:0.72rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px">Warna Tema</div>
-          <select id="set_color" onchange="updatePreviewColor(this.value)"
-            style="width:100%;background:var(--bg);border:1.5px solid var(--border);color:var(--text);font-family:sans-serif;font-size:0.9rem;padding:10px 12px;border-radius:10px;outline:none">
-            ${colorOptions}
-          </select>
+          <div style="font-size:0.72rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:10px">Warna Tema</div>
+          <div id="colorSwatchGrid" style="display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin-bottom:12px"></div>
+          <div style="display:flex;align-items:center;gap:10px">
+            <div id="hexPreviewBox" style="width:44px;height:44px;border-radius:10px;border:1.5px solid var(--border);background:${color};flex-shrink:0"></div>
+            <input id="set_color" type="text" value="${color}" maxlength="7"
+              oninput="if(/^#[0-9a-fA-F]{6}$/i.test(this.value)) pickColor(this.value)"
+              placeholder="#c0392b"
+              style="flex:1;background:var(--bg);border:1.5px solid var(--border);color:var(--text);font-family:monospace;font-size:0.9rem;padding:10px 12px;border-radius:10px;outline:none;text-transform:uppercase">
+          </div>
         </div>
       </div>
 
@@ -3015,14 +3057,21 @@ function renderPengaturan(){
         💾 Simpan Pengaturan
       </button>
     </div>`;
+  setTimeout(initLogoUploadArea, 0);
+  setTimeout(initColorSwatches, 0);
+}
+
+function initColorSwatches(){
+  const color=localStorage.getItem('rms_school_color')||'#c0392b';
+  renderColorSwatches(color);
 }
 
 function pickColor(val){
   window._pickedColor=val;
   document.getElementById('settingPreview').style.background=val;
-  const picker=document.getElementById('set_color_picker');
+  const box=document.getElementById('hexPreviewBox');
   const hex=document.getElementById('set_color');
-  if(picker) picker.value=val;
+  if(box) box.style.background=val;
   if(hex) hex.value=val;
   renderColorSwatches(val);
 }
@@ -3030,14 +3079,18 @@ function pickColor(val){
 function renderColorSwatches(selected){
   const colors=[
     {name:'Merah',val:'#c0392b'},{name:'Merah Muda',val:'#e91e8c'},
-    {name:'Koral',val:'#e74c3c'},{name:'Orange',val:'#d03801'},
-    {name:'Amber',val:'#d97706'},{name:'Kuning',val:'#ca8a04'},
+    {name:'Koral',val:'#e74c3c'},{name:'Salmon',val:'#fb7185'},
+    {name:'Orange',val:'#d03801'},{name:'Amber',val:'#d97706'},
+    {name:'Kuning',val:'#ca8a04'},{name:'Lemon',val:'#eab308'},
     {name:'Hijau Lime',val:'#65a30d'},{name:'Hijau',val:'#057a55'},
-    {name:'Teal',val:'#0f766e'},{name:'Cyan',val:'#0891b2'},
+    {name:'Emerald',val:'#059669'},{name:'Teal',val:'#0f766e'},
+    {name:'Cyan',val:'#0891b2'},{name:'Sky',val:'#0284c7'},
     {name:'Biru',val:'#2563eb'},{name:'Biru Tua',val:'#1a56db'},
-    {name:'Indigo',val:'#4338ca'},{name:'Ungu',val:'#7e3af2'},
-    {name:'Fuchsia',val:'#a21caf'},{name:'Rose',val:'#be123c'},
-    {name:'Abu Gelap',val:'#374151'},{name:'Hitam',val:'#111827'},
+    {name:'Indigo',val:'#4338ca'},{name:'Violet',val:'#6d28d9'},
+    {name:'Ungu',val:'#7e3af2'},{name:'Fuchsia',val:'#a21caf'},
+    {name:'Pink',val:'#db2777'},{name:'Rose',val:'#be123c'},
+    {name:'Coklat',val:'#92400e'},{name:'Abu Gelap',val:'#374151'},
+    {name:'Slate',val:'#475569'},{name:'Hitam',val:'#111827'},
   ];
   const grid=document.getElementById('colorSwatchGrid');
   if(!grid) return;
