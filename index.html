@@ -685,7 +685,7 @@ let currentTab='absensi';
 let selectedDay='';
 let editIdx=null;
 let noteStudent=null;
-let trackPeriod='minggu';
+let trackPeriod='bulan';
 let trackSort='izin';
 let trackSearch='';
 let viewingStudent=null; // for history detail
@@ -1717,8 +1717,17 @@ function renderStudentProfile(name, period){
   };
 
   // Collect all dates that have attendance or notes for this student
+  // (termasuk sesi tambahan kelas dengan key name_extra_N)
+  const extraCount = (s.extraDates||[]).length;
+  const hasExtraOnDate = (dk)=>{
+    for(let ei=0; ei<extraCount; ei++){
+      const ek=name+'_extra_'+ei;
+      if(attendance[dk]&&(attendance[dk][ek]||attNotes[dk+'_'+ek])) return true;
+    }
+    return false;
+  };
   const allDates = Object.keys(attendance)
-    .filter(dk=>attendance[dk][name]||attNotes[dk+'_'+name])
+    .filter(dk=>attendance[dk][name]||attNotes[dk+'_'+name]||hasExtraOnDate(dk))
     .sort((a,b)=>b.localeCompare(a));
 
   const filtered = allDates.filter(dk=>inPeriod(dk));
@@ -1750,24 +1759,40 @@ function renderStudentProfile(name, period){
   // Progress entries
   const entriesHtml = filtered.length
     ? filtered.map(dk=>{
-        const st = (attendance[dk]||{})[name];
-        const note = attNotes[dk+'_'+name]||{};
+        let st = (attendance[dk]||{})[name];
+        let note = attNotes[dk+'_'+name]||{};
+        let attKey = name;
+        // Jika sesi reguler kosong, cek sesi tambahan (extra) di tanggal ini
+        if(!st&&!note.progress&&!note.reason){
+          for(let ei=0; ei<extraCount; ei++){
+            const ek=name+'_extra_'+ei;
+            const est=(attendance[dk]||{})[ek];
+            const enote=attNotes[dk+'_'+ek]||{};
+            if(est||enote.progress||enote.reason){
+              st=est; note=enote; attKey=ek; break;
+            }
+          }
+        }
         if(!st&&!note.progress&&!note.reason) return '';
         const stLabel = st==='hadir'?'✅ Hadir':st==='izin'?'✋ Izin':st==='alpa'?'✗ Alpa':'';
         const stColor = st==='hadir'?'var(--hadir)':st==='izin'?'var(--izin)':'var(--alpa)';
         const safeName2=name.replace(/'/g,"\\'");
+        const safeAttKey=attKey.replace(/'/g,"\\'");
         const safeDk=dk.replace(/'/g,"\\'");
         return '<div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:13px 15px;margin-bottom:8px">'
           +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">'
-            +'<div style="font-size:0.7rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em">'+fmtPretty(dk)+'</div>'
+            +'<div style="display:flex;align-items:center;gap:6px;font-size:0.7rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em">'
+              +fmtPretty(dk)
+              +(attKey!==name?' · <span style="color:var(--blue)">➕ Tambahan</span>':'')
+              +(stLabel?' · <span style="color:'+stColor+'">'+stLabel+'</span>':'')
+            +'</div>'
             +'<div style="display:flex;gap:6px">'
-            +'<button onclick="openTrackEditModal(\''+safeName2+'\',\''+( st||'hadir')+'\',\''+safeName2+'\',\''+safeDk+'\')" '
+            +'<button onclick="openTrackEditModal(\''+safeAttKey+'\',\''+( st||'hadir')+'\',\''+safeName2+'\',\''+safeDk+'\')" '
               +'style="width:28px;height:28px;border-radius:8px;border:1.5px solid var(--border);background:var(--bg);color:var(--muted);font-size:0.75rem;cursor:pointer;display:flex;align-items:center;justify-content:center">✏️</button>'
-            +'<button onclick="deleteAttendance(\''+safeName2+'\',\''+safeDk+'\')" '
+            +'<button onclick="deleteAttendance(\''+safeAttKey+'\',\''+safeDk+'\')" '
               +'style="width:28px;height:28px;border-radius:8px;border:1.5px solid rgba(220,38,38,0.25);background:#fff5f5;color:var(--alpa);font-size:0.75rem;cursor:pointer;display:flex;align-items:center;justify-content:center">🗑</button>'
             +'</div>'
           +'</div>'
-          +(stLabel?'<div style="display:inline-block;padding:3px 11px;border-radius:20px;font-size:0.72rem;font-weight:700;color:'+stColor+';background:'+stColor+'18;margin-bottom:6px">'+stLabel+'</div>':'')
           +(note.reason?'<div style="font-size:0.82rem;color:var(--text);background:#fffbeb;border-radius:9px;padding:8px 11px;margin-top:5px;border-left:3px solid var(--izin)">📋 '+note.reason+'</div>':'')
           +(note.progress?'<div style="font-size:0.82rem;color:var(--text);background:var(--blue-bg);border-radius:9px;padding:8px 11px;margin-top:6px;border-left:3px solid var(--blue)">📝 '+note.progress+'</div>':'')
           +'</div>';
@@ -3308,7 +3333,9 @@ function renderFormRescheduleList(s){
 function deleteAttendance(name, dk){
   history.pushState({tab:currentTab, view:'modal'},'');
   window._pendingDelete = {name, dk};
-  document.getElementById('deleteConfirmName').textContent = name;
+  // Tampilkan nama bersih (tanpa _extra_N)
+  const displayName = name.replace(/_extra_\d+$/, '');
+  document.getElementById('deleteConfirmName').textContent = displayName;
   document.getElementById('deleteConfirmDate').textContent = fmtPretty(dk);
   document.getElementById('deleteConfirmOverlay').classList.add('open');
 }
