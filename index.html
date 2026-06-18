@@ -1360,11 +1360,18 @@ function openNoteModal(attKey, status, displayName, dateOverride){
     const dateKey=dateOverride||todayStr();
     if(!attendance[dateKey]) attendance[dateKey]={};
     const att=attendance[dateKey];
-    // Toggle off if same status
+    // Toggle off if same status -> minta konfirmasi dulu (mencegah reset progress tidak sengaja)
     if(att[attKey]===status){
-      delete att[attKey];
-      save();render();
-      toast('↩️ '+name+' direset');
+      // Cek catatan di attKey dan di name (untuk extra session)
+      const noteKeyChk=dateKey+'_'+attKey;
+      const noteKeyChk2=dateKey+'_'+name;
+      const existingChk=attNotes[noteKeyChk]||attNotes[noteKeyChk2]||{};
+      const hasNote=!!(existingChk.reason||existingChk.progress);
+      window._pendingReset={attKey, dateKey, name, hasNote, noteKey: noteKeyChk, noteKey2: noteKeyChk2};
+      const msg=hasNote
+        ? '⚠️ Catatan progress <b>'+name+'</b> akan ikut terhapus jika direset!<br><br>Yakin ingin mereset kehadiran siswa ini?'
+        : 'Yakin ingin mereset kehadiran <b>'+name+'</b> menjadi Belum?';
+      showConfirmReset(msg);
       return;
     }
     const s=students.find(x=>x.name===name)||{};
@@ -1395,6 +1402,50 @@ function onNoteStatusChange(){
 }
 
 function closeNoteModal(){document.getElementById('noteOverlay').classList.remove('open');noteStudent=null}
+
+// ── KONFIRMASI RESET KEHADIRAN ──────────────────────────
+function showConfirmReset(msg){
+  let overlay=document.getElementById('resetConfirmOverlay');
+  if(!overlay){
+    overlay=document.createElement('div');
+    overlay.id='resetConfirmOverlay';
+    overlay.className='overlay';
+    overlay.innerHTML=`
+      <div class="modal" style="max-width:340px">
+        <div style="font-size:1.3rem;text-align:center;margin-bottom:6px">⚠️</div>
+        <div style="font-size:1rem;font-weight:800;margin-bottom:10px;text-align:center">Konfirmasi Reset</div>
+        <div id="resetConfirmMsg" style="font-size:0.88rem;color:var(--text);text-align:center;margin-bottom:18px;line-height:1.6"></div>
+        <div style="display:flex;gap:10px">
+          <button onclick="cancelResetAttendance()" style="flex:1;padding:13px;border-radius:12px;border:1.5px solid var(--border);background:transparent;color:var(--muted);font-family:sans-serif;font-size:0.9rem;font-weight:700;cursor:pointer">Batal</button>
+          <button onclick="confirmResetAttendance()" style="flex:1;padding:13px;border-radius:12px;border:none;background:var(--alpa);color:#fff;font-family:sans-serif;font-size:0.9rem;font-weight:700;cursor:pointer">Ya, Reset</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+  }
+  document.getElementById('resetConfirmMsg').innerHTML=msg;
+  history.pushState({tab:currentTab, view:'modal'},'');
+  overlay.classList.add('open');
+}
+
+function cancelResetAttendance(){
+  const overlay=document.getElementById('resetConfirmOverlay');
+  if(overlay) overlay.classList.remove('open');
+  window._pendingReset=null;
+  history.back();
+}
+
+function confirmResetAttendance(){
+  const pending=window._pendingReset;
+  const overlay=document.getElementById('resetConfirmOverlay');
+  if(overlay) overlay.classList.remove('open');
+  if(!pending){ return; }
+  const {attKey, dateKey, name}=pending;
+  if(attendance[dateKey]) delete attendance[dateKey][attKey];
+  delete attNotes[dateKey+'_'+name];
+  window._pendingReset=null;
+  save();render();
+  toast('↩️ '+name+' direset');
+}
 
 // Edit progress/catatan dari tab Track (tanpa toggle-off status)
 function openTrackEditModal(attKey, status, displayName, dateKey){
@@ -1732,11 +1783,20 @@ function renderStudentProfile(name, period){
 
   const filtered = allDates.filter(dk=>inPeriod(dk));
 
-  // Stats
-  const hadirAll   = allDates.filter(dk=>attendance[dk]&&attendance[dk][name]==='hadir').length + (s.initialSessions||0);
-  const hadirPer   = filtered.filter(dk=>attendance[dk]&&attendance[dk][name]==='hadir').length;
-  const izinPer    = filtered.filter(dk=>attendance[dk]&&attendance[dk][name]==='izin').length;
-  const alpaPer    = filtered.filter(dk=>attendance[dk]&&attendance[dk][name]==='alpa').length;
+  // Stats (status pada tanggal dk: cek sesi reguler ATAU sesi tambahan)
+  const statusOnDate = (dk)=>{
+    if(!attendance[dk]) return null;
+    if(attendance[dk][name]) return attendance[dk][name];
+    for(let ei=0; ei<extraCount; ei++){
+      const ek=name+'_extra_'+ei;
+      if(attendance[dk][ek]) return attendance[dk][ek];
+    }
+    return null;
+  };
+  const hadirAll   = allDates.filter(dk=>statusOnDate(dk)==='hadir').length + (s.initialSessions||0);
+  const hadirPer   = filtered.filter(dk=>statusOnDate(dk)==='hadir').length;
+  const izinPer    = filtered.filter(dk=>statusOnDate(dk)==='izin').length;
+  const alpaPer    = filtered.filter(dk=>statusOnDate(dk)==='alpa').length;
 
   // Billing info
   const billing    = countSessionsForBilling(name);
