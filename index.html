@@ -583,6 +583,7 @@ body{
       <div class="mfield"><label>Catatan</label><input id="f_notes" type="text" placeholder="Opsional"/></div>
     </div>
     <div class="mrow">
+      <div class="mfield"><label>Tarif per Sesi (Rp)</label><input id="f_rate" type="number" min="0" step="1000" placeholder="Default: 40.000"/></div>
       <div class="mfield"><label>Siklus Bayar</label>
         <select id="f_pay_cycle">
           <option value="4">4x pertemuan</option>
@@ -1922,7 +1923,7 @@ function renderStudentProfile(name, period){
 
 
 function renderTrack(){
-  const {totalHadir,totalAlpa}=calcTrackTotals();
+  const {totalHadir,totalAlpa,totalPenghasilan}=calcTrackTotals();
   const modeBar=`
     <div class="track-mode-bar">
       <button class="track-mode-btn ${trackMode==='siswa'?'active':''}" onclick="setTrackMode('siswa')">👤 Per Siswa</button>
@@ -1961,6 +1962,11 @@ function renderTrack(){
       ${modeBar}
       <div class="period-bar">
         ${['minggu','bulan','tahun','semua'].map(p=>`<button class="period-btn ${trackPeriod===p?'active':''}" onclick="setPeriod('${p}')">${p.charAt(0).toUpperCase()+p.slice(1)}</button>`).join('')}
+      </div>
+      <div id="incomeCard" style="background:linear-gradient(135deg,var(--red),var(--red2));border-radius:16px;padding:16px 18px;margin:0 0 14px;color:#fff;box-shadow:0 4px 14px rgba(0,0,0,0.12)">
+        <div style="font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;opacity:0.85;margin-bottom:4px">💰 Estimasi Penghasilan · ${trackPeriod.charAt(0).toUpperCase()+trackPeriod.slice(1)}</div>
+        <div id="incomeAmount" style="font-size:1.6rem;font-weight:800">Rp ${totalPenghasilan.toLocaleString('id-ID')}</div>
+        <div style="font-size:0.72rem;opacity:0.85;margin-top:2px">${totalHadir+totalAlpa} sesi (Hadir + Alpa) × tarif per siswa</div>
       </div>
       <div class="track-controls">
         <div class="track-search"><span style="color:var(--muted)">🔍</span><input type="text" placeholder="Cari nama..." value="${trackSearch}" oninput="trackSearch=this.value;refreshTrackCards()"/></div>
@@ -2122,10 +2128,12 @@ function buildDateDetail(dk){
 
 function refreshTrackCards(){
   document.getElementById('trackCards').innerHTML=buildTrackCards();
-  const {totalHadir,totalAlpa}=calcTrackTotals();
+  const {totalHadir,totalAlpa,totalPenghasilan}=calcTrackTotals();
   // Hitung total sesi hadir + alpa di periode ini
   const badge=document.getElementById('trackTotalBadge');
   if(badge) badge.textContent=totalHadir+totalAlpa;
+  const incomeAmt=document.getElementById('incomeAmount');
+  if(incomeAmt) incomeAmt.textContent='Rp '+totalPenghasilan.toLocaleString('id-ID');
 }
 
 function calcTrackTotals(){
@@ -2139,9 +2147,10 @@ function calcTrackTotals(){
   } else if(trackPeriod==='tahun'){
     fromDate=new Date(now.getFullYear(),0,1);
   }
-  let totalHadir=0,totalAlpa=0;
+  let totalHadir=0,totalAlpa=0,totalPenghasilan=0;
   const filtered=students.filter(s=>s.name.toLowerCase().includes(trackSearch.toLowerCase()));
   filtered.forEach(s=>{
+    const rate=s.rate||40000;
     Object.entries(attendance).forEach(([dk,dayAtt])=>{
       const d=new Date(dk+'T00:00:00');
       if(fromDate&&d<fromDate) return;
@@ -2154,18 +2163,18 @@ function calcTrackTotals(){
       if(dayName!==s.day&&!hasExtra&&!isDay2&&!isDay3&&!isDay4&&!isRescheduleDate2) return;
       // Sesi reguler
       const st=dayAtt[s.name];
-      if(st==='hadir') totalHadir++;
-      else if(st==='alpa') totalAlpa++;
+      if(st==='hadir'){ totalHadir++; totalPenghasilan+=rate; }
+      else if(st==='alpa'){ totalAlpa++; totalPenghasilan+=rate; }
       // Sesi extra (key: name_extra_N)
       if(s.extraDates) s.extraDates.forEach((ed,ei)=>{
         if(ed.date!==dk) return;
         const est=dayAtt[s.name+'_extra_'+ei];
-        if(est==='hadir') totalHadir++;
-        else if(est==='alpa') totalAlpa++;
+        if(est==='hadir'){ totalHadir++; totalPenghasilan+=rate; }
+        else if(est==='alpa'){ totalAlpa++; totalPenghasilan+=rate; }
       });
     });
   });
-  return {totalHadir,totalAlpa};
+  return {totalHadir,totalAlpa,totalPenghasilan};
 }
 
 // (badge track dipindah ke samping judul Track Record)
@@ -2799,7 +2808,7 @@ function openAdd(){
   document.getElementById('modalTitle').textContent='＋ Tambah Murid';
   document.getElementById('modalSub').style.display='none';
   document.getElementById('delBtn').style.display='none';
-  ['f_name','f_inst','f_notes','f_phone','f_extra_note','f_initial_sessions','f_sheet_link','f_day2','f_time2a','f_time2b','f_day3','f_time3a','f_time3b','f_day4','f_time4a','f_time4b'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  ['f_name','f_inst','f_notes','f_phone','f_extra_note','f_initial_sessions','f_sheet_link','f_day2','f_time2a','f_time2b','f_day3','f_time3a','f_time3b','f_day4','f_time4a','f_time4b','f_rate'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   document.getElementById('f_pay_cycle').value='4';
   document.getElementById('f_admin_wa').value=adminWaNumber;
   extraDates=[];
@@ -2844,6 +2853,7 @@ function openEdit(idx){
   document.getElementById('f_extra_note').value=s.extraNote||'';
   document.getElementById('f_initial_sessions').value=s.initialSessions||'';
   document.getElementById('f_pay_cycle').value=s.payCycle||4;
+  document.getElementById('f_rate').value=s.rate||'';
   document.getElementById('f_admin_wa').value=s.adminWa||adminWaNumber||'';
   document.getElementById('f_sheet_link').value=s.sheetLink||'';
   extraDates=s.extraDates?JSON.parse(JSON.stringify(s.extraDates)):[];
@@ -2926,6 +2936,7 @@ function doSave(){
     extraDates:extraDates.filter(ed=>ed.date),
     extraNote:document.getElementById('f_extra_note').value.trim(),
     payCycle:parseInt(document.getElementById('f_pay_cycle').value)||4,
+    rate:parseInt(document.getElementById('f_rate').value)||40000,
     initialSessions:parseInt(document.getElementById('f_initial_sessions').value)||0,
     adminWa:document.getElementById('f_admin_wa').value.trim(),
     sheetLink:document.getElementById('f_sheet_link').value.trim(),
