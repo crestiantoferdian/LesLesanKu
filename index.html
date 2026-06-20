@@ -687,7 +687,8 @@ let selectedDay='';
 let editIdx=null;
 let noteStudent=null;
 let trackPeriod='bulan';
-let trackSort='izin';
+let incomeHidden=localStorage.getItem('llk_income_hidden')==='1';
+let trackSort='terbaru';
 let trackSearch='';
 let viewingStudent=null; // for history detail
 let trackMode='siswa';   // 'siswa' | 'tanggal'
@@ -1883,9 +1884,13 @@ function renderStudentProfile(name, period){
     +'</div>'
   +'</div>';
 
+  const studentIdx = students.findIndex(x=>x.name===name);
   document.getElementById('mainContent').innerHTML =
     '<div class="page-title-area">'
-      +'<div class="hist-back" onclick="window._profileFrom===\'absensi\'?setTab(\'absensi\'):renderSiswa()"><span>‹</span><div class="hist-back-label">Kembali</div></div>'
+      +'<div style="display:flex;align-items:center;justify-content:space-between">'
+        +'<div class="hist-back" onclick="window._profileFrom===\'absensi\'?setTab(\'absensi\'):renderSiswa()"><span>‹</span><div class="hist-back-label">Kembali</div></div>'
+        +(studentIdx>=0?'<button onclick="openEdit('+studentIdx+')" style="display:flex;align-items:center;gap:5px;padding:8px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--card);color:var(--text);font-family:sans-serif;font-size:0.82rem;font-weight:600;cursor:pointer">✏️ Edit Murid</button>':'')
+      +'</div>'
       +'<div style="display:flex;align-items:center;gap:13px;margin-top:12px">'
         +'<div class="track-avatar '+(isVokal?'vocal':'')+'" style="width:54px;height:54px;font-size:1.55rem;flex-shrink:0">'+icon+'</div>'
         +'<div>'
@@ -1949,7 +1954,17 @@ function renderTrack(){
 
   const cards=buildTrackCards();
   document.getElementById('mainContent').innerHTML=
-    `<div class="page-title-area">
+    `<div style="padding:24px 20px 0">
+      <div id="incomeCard" style="background:linear-gradient(135deg,var(--red),var(--red2));border-radius:16px;padding:16px 18px;margin-bottom:16px;color:#fff;box-shadow:0 4px 14px rgba(0,0,0,0.12)">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+          <div style="font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;opacity:0.85">💰 Estimasi Penghasilan · ${trackPeriod.charAt(0).toUpperCase()+trackPeriod.slice(1)}</div>
+          <button id="incomeToggleBtn" onclick="toggleIncomeVisibility()" style="background:rgba(255,255,255,0.18);border:none;width:30px;height:30px;border-radius:9px;color:#fff;font-size:0.95rem;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0">${incomeHidden?'🙈':'👁️'}</button>
+        </div>
+        <div id="incomeAmount" style="font-size:1.6rem;font-weight:800">${incomeHidden?'••••••••':'Rp '+totalPenghasilan.toLocaleString('id-ID')}</div>
+        <div style="font-size:0.72rem;opacity:0.85;margin-top:2px">${totalHadir+totalAlpa} sesi (Hadir + Alpa) × tarif per siswa</div>
+      </div>
+    </div>
+    <div class="page-title-area" style="padding-top:0">
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
         <div class="page-title" style="margin:0">Track Record</div>
         <div style="display:flex;gap:6px;align-items:center">
@@ -1963,14 +1978,10 @@ function renderTrack(){
       <div class="period-bar">
         ${['minggu','bulan','tahun','semua'].map(p=>`<button class="period-btn ${trackPeriod===p?'active':''}" onclick="setPeriod('${p}')">${p.charAt(0).toUpperCase()+p.slice(1)}</button>`).join('')}
       </div>
-      <div id="incomeCard" style="background:linear-gradient(135deg,var(--red),var(--red2));border-radius:16px;padding:16px 18px;margin:0 0 14px;color:#fff;box-shadow:0 4px 14px rgba(0,0,0,0.12)">
-        <div style="font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;opacity:0.85;margin-bottom:4px">💰 Estimasi Penghasilan · ${trackPeriod.charAt(0).toUpperCase()+trackPeriod.slice(1)}</div>
-        <div id="incomeAmount" style="font-size:1.6rem;font-weight:800">Rp ${totalPenghasilan.toLocaleString('id-ID')}</div>
-        <div style="font-size:0.72rem;opacity:0.85;margin-top:2px">${totalHadir+totalAlpa} sesi (Hadir + Alpa) × tarif per siswa</div>
-      </div>
       <div class="track-controls">
         <div class="track-search"><span style="color:var(--muted)">🔍</span><input type="text" placeholder="Cari nama..." value="${trackSearch}" oninput="trackSearch=this.value;refreshTrackCards()"/></div>
         <select class="sort-select" onchange="trackSort=this.value;refreshTrackCards()">
+          <option value="terbaru" ${trackSort==='terbaru'?'selected':''}>Terbaru</option>
           <option value="izin" ${trackSort==='izin'?'selected':''}>Izin Terbanyak</option>
           <option value="alpa" ${trackSort==='alpa'?'selected':''}>Alpa Terbanyak</option>
           <option value="hadir" ${trackSort==='hadir'?'selected':''}>Hadir Terbanyak</option>
@@ -2133,7 +2144,17 @@ function refreshTrackCards(){
   const badge=document.getElementById('trackTotalBadge');
   if(badge) badge.textContent=totalHadir+totalAlpa;
   const incomeAmt=document.getElementById('incomeAmount');
-  if(incomeAmt) incomeAmt.textContent='Rp '+totalPenghasilan.toLocaleString('id-ID');
+  if(incomeAmt) incomeAmt.textContent=incomeHidden?'••••••••':'Rp '+totalPenghasilan.toLocaleString('id-ID');
+}
+
+function toggleIncomeVisibility(){
+  incomeHidden=!incomeHidden;
+  localStorage.setItem('llk_income_hidden', incomeHidden?'1':'0');
+  const btn=document.getElementById('incomeToggleBtn');
+  if(btn) btn.textContent=incomeHidden?'🙈':'👁️';
+  const {totalPenghasilan}=calcTrackTotals();
+  const incomeAmt=document.getElementById('incomeAmount');
+  if(incomeAmt) incomeAmt.textContent=incomeHidden?'••••••••':'Rp '+totalPenghasilan.toLocaleString('id-ID');
 }
 
 function calcTrackTotals(){
@@ -2194,7 +2215,7 @@ function buildTrackCards(){
   }
 
   const stats=students.map(s=>{
-    let hadir=0,izin=0,alpa=0;
+    let hadir=0,izin=0,alpa=0,lastHadirDate=null;
     Object.entries(attendance).forEach(([dk,dayAtt])=>{
       const d=new Date(dk+'T00:00:00');
       if(fromDate&&d<fromDate) return;
@@ -2207,25 +2228,26 @@ function buildTrackCards(){
       if(dayName!==s.day&&!hasExtra&&!isDay2&&!isDay3&&!isDay4&&!isRescheduleDate) return;
       // Regular + reschedule session
       const st=dayAtt[s.name];
-      if(st==='hadir') hadir++;
+      if(st==='hadir'){ hadir++; if(!lastHadirDate||dk>lastHadirDate) lastHadirDate=dk; }
       else if(st==='izin') izin++;
       else if(st==='alpa') alpa++;
       // Extra sessions on this date
       if(s.extraDates) s.extraDates.forEach((ed,ei)=>{
         if(ed.date!==dk) return;
         const est=dayAtt[s.name+'_extra_'+ei];
-        if(est==='hadir') hadir++;
+        if(est==='hadir'){ hadir++; if(!lastHadirDate||dk>lastHadirDate) lastHadirDate=dk; }
         else if(est==='izin') izin++;
         else if(est==='alpa') alpa++;
       });
     });
-    return {s,hadir,izin,alpa};
+    return {s,hadir,izin,alpa,lastHadirDate};
   });
 
   let filtered=stats.filter(x=>x.s.name.toLowerCase().includes(trackSearch.toLowerCase()));
   if(trackSort==='izin') filtered.sort((a,b)=>b.izin-a.izin||b.alpa-a.alpa);
   else if(trackSort==='alpa') filtered.sort((a,b)=>b.alpa-a.alpa||b.izin-a.izin);
   else if(trackSort==='hadir') filtered.sort((a,b)=>b.hadir-a.hadir);
+  else if(trackSort==='terbaru') filtered.sort((a,b)=>(b.lastHadirDate||'').localeCompare(a.lastHadirDate||''));
   else filtered.sort((a,b)=>a.s.name.localeCompare(b.s.name));
 
   if(!filtered.length) return `<div class="empty"><div class="empty-icon">🔍</div><div class="empty-t">Tidak ditemukan</div></div>`;
