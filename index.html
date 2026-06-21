@@ -1926,7 +1926,7 @@ function renderStudentProfile(name, period){
 
 
 function renderTrack(){
-  const {totalHadir,totalAlpa,totalPenghasilan}=calcTrackTotals();
+  const {totalHadir,totalIzin,totalAlpa,totalPenghasilan}=calcTrackTotals();
   const modeBar=`
     <div class="track-mode-bar">
       <button class="track-mode-btn ${trackMode==='siswa'?'active':''}" onclick="setTrackMode('siswa')">👤 Per Siswa</button>
@@ -1954,21 +1954,35 @@ function renderTrack(){
   document.getElementById('mainContent').innerHTML=
     `<div style="padding:24px 20px 0">
       <div id="incomeCard" style="background:linear-gradient(135deg,var(--red),var(--red2));border-radius:16px;padding:16px 18px;margin-bottom:16px;color:#fff;box-shadow:0 4px 14px rgba(0,0,0,0.12)">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
-          <div style="font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;opacity:0.85">💰 Estimasi Penghasilan · ${trackPeriod.charAt(0).toUpperCase()+trackPeriod.slice(1)}</div>
-          <button id="incomeToggleBtn" onclick="toggleIncomeVisibility()" style="background:rgba(255,255,255,0.18);border:none;width:30px;height:30px;border-radius:9px;color:#fff;font-size:0.95rem;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0">${incomeHidden?'🙈':'👁️'}</button>
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px">
+          <div style="flex:1;min-width:0">
+            <div style="font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;opacity:0.85;margin-bottom:4px">💰 Estimasi Penghasilan · ${trackPeriod.charAt(0).toUpperCase()+trackPeriod.slice(1)}</div>
+            <div id="incomeAmount" style="font-size:1.6rem;font-weight:800">${incomeHidden?'••••••••':'Rp '+totalPenghasilan.toLocaleString('id-ID')}</div>
+            <div style="font-size:0.72rem;opacity:0.85;margin-top:2px">Hadir + Alpa × tarif per siswa</div>
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0">
+            <button id="incomeToggleBtn" onclick="toggleIncomeVisibility()" style="background:rgba(255,255,255,0.18);border:none;width:30px;height:30px;border-radius:9px;color:#fff;font-size:0.95rem;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0">${incomeHidden?'🙈':'👁️'}</button>
+            <div id="trackStatSub" style="font-size:1.4rem;font-weight:800;opacity:0.95;text-align:right">${totalHadir+totalAlpa}</div>
+          </div>
         </div>
-        <div id="incomeAmount" style="font-size:1.6rem;font-weight:800">${incomeHidden?'••••••••':'Rp '+totalPenghasilan.toLocaleString('id-ID')}</div>
-        <div style="font-size:0.72rem;opacity:0.85;margin-top:2px">${totalHadir+totalAlpa} sesi (Hadir + Alpa) × tarif per siswa</div>
+      </div>
+      <div id="trackStatBox" style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px">
+        <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px 8px;text-align:center">
+          <div id="trackStatHadir" style="font-size:1.5rem;font-weight:800;color:var(--hadir)">${totalHadir}</div>
+          <div style="font-size:0.68rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.04em;margin-top:2px">Hadir</div>
+        </div>
+        <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px 8px;text-align:center">
+          <div id="trackStatIzin" style="font-size:1.5rem;font-weight:800;color:#f97316">${totalIzin}</div>
+          <div style="font-size:0.68rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.04em;margin-top:2px">Izin</div>
+        </div>
+        <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px 8px;text-align:center">
+          <div id="trackStatAlpa" style="font-size:1.5rem;font-weight:800;color:var(--alpa)">${totalAlpa}</div>
+          <div style="font-size:0.68rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.04em;margin-top:2px">Alpa</div>
+        </div>
       </div>
     </div>
     <div class="page-title-area" style="padding-top:0">
-      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-        <div class="page-title" style="margin:0">Track Record</div>
-        <div style="display:flex;gap:6px;align-items:center">
-          <span style="font-size:1rem;font-weight:800;background:#f0f0f5;color:var(--text);border:1px solid var(--border);border-radius:20px;padding:3px 14px" id="trackTotalBadge">${totalHadir+totalAlpa}</span>
-        </div>
-      </div>
+      <div class="page-title" style="margin:0">Track Record</div>
       <div class="page-sub">Tap nama murid untuk lihat histori lengkap.</div>
     </div>
     <div class="track-wrap">
@@ -2137,12 +2151,20 @@ function buildDateDetail(dk){
 
 function refreshTrackCards(){
   document.getElementById('trackCards').innerHTML=buildTrackCards();
-  const {totalHadir,totalAlpa,totalPenghasilan}=calcTrackTotals();
+  const {totalHadir,totalIzin,totalAlpa,totalPenghasilan}=calcTrackTotals();
   // Hitung total sesi hadir + alpa di periode ini
   const badge=document.getElementById('trackTotalBadge');
   if(badge) badge.textContent=totalHadir+totalAlpa;
   const incomeAmt=document.getElementById('incomeAmount');
   if(incomeAmt) incomeAmt.textContent=incomeHidden?'••••••••':'Rp '+totalPenghasilan.toLocaleString('id-ID');
+  const sh=document.getElementById('trackStatHadir');
+  const si=document.getElementById('trackStatIzin');
+  const sa=document.getElementById('trackStatAlpa');
+  if(sh) sh.textContent=totalHadir;
+  if(si) si.textContent=totalIzin;
+  if(sa) sa.textContent=totalAlpa;
+  const sub=document.getElementById('trackStatSub');
+  if(sub) sub.textContent=totalHadir+totalAlpa;
 }
 
 function toggleIncomeVisibility(){
@@ -2166,7 +2188,7 @@ function calcTrackTotals(){
   } else if(trackPeriod==='tahun'){
     fromDate=new Date(now.getFullYear(),0,1);
   }
-  let totalHadir=0,totalAlpa=0,totalPenghasilan=0;
+  let totalHadir=0,totalIzin=0,totalAlpa=0,totalPenghasilan=0;
   const filtered=students.filter(s=>s.name.toLowerCase().includes(trackSearch.toLowerCase()));
   filtered.forEach(s=>{
     const rate=s.rate||40000;
@@ -2183,17 +2205,19 @@ function calcTrackTotals(){
       // Sesi reguler
       const st=dayAtt[s.name];
       if(st==='hadir'){ totalHadir++; totalPenghasilan+=rate; }
+      else if(st==='izin'){ totalIzin++; }
       else if(st==='alpa'){ totalAlpa++; totalPenghasilan+=rate; }
       // Sesi extra (key: name_extra_N)
       if(s.extraDates) s.extraDates.forEach((ed,ei)=>{
         if(ed.date!==dk) return;
         const est=dayAtt[s.name+'_extra_'+ei];
         if(est==='hadir'){ totalHadir++; totalPenghasilan+=rate; }
+        else if(est==='izin'){ totalIzin++; }
         else if(est==='alpa'){ totalAlpa++; totalPenghasilan+=rate; }
       });
     });
   });
-  return {totalHadir,totalAlpa,totalPenghasilan};
+  return {totalHadir,totalIzin,totalAlpa,totalPenghasilan};
 }
 
 // (badge track dipindah ke samping judul Track Record)
