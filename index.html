@@ -1124,7 +1124,7 @@ function renderAbsensi(){
       :isAlpa
       ?`<div style="font-size:0.72rem;color:#dc2626;font-weight:700;margin-top:3px;display:flex;align-items:center;gap:4px">✗ Alpa${alpaReason?' · <span style="font-weight:400">'+alpaReason+'</span>':''}</div>`
       :'';
-    return `<div class="s-item status-${status}" id="sitem-${attKey.replace(/[^a-zA-Z0-9]/g,'_')}" onclick="toggleSItem(this)" style="cursor:pointer;${borderLeft}">
+    return `<div class="s-item status-${status}" id="sitem-${attKey.replace(/[^a-zA-Z0-9]/g,'_')}" onclick="${samedayRs?'':'toggleSItem(this)'}" style="cursor:${samedayRs?'default':'pointer'};${borderLeft}">
       <div class="s-avatar ${isVokal?'vocal':''}" style="${avatarOpacity}">
         ${icon}
         ${badgeHtml}
@@ -1144,11 +1144,14 @@ function renderAbsensi(){
         ${note.progress?`<div class="s-note-preview">📝 ${note.progress}</div>`:''}
         ${showPayWarn?`<div class="pay-warn" onclick="sendPaymentWA('${s.name}')">💳 ${totalSessions}x pertemuan — Ingatkan bayar via WA</div>`:''}
         <div class="att-btns" onclick="event.stopPropagation()">
-            <button class="att-btn a-hadir ${status==='hadir'?'on':''}" onclick="openNoteModal('${attKey}','hadir','${s.name}','${attDateKey}')">✅</button>
+            ${samedayRs
+              ? `<div style="font-size:0.75rem;color:#7c3aed;font-weight:600;padding:6px 8px;background:#f5f3ff;border-radius:8px;border:1.5px solid #ddd6fe">🔒 Jadwal dipindah ke jam ${samedayRs.time}${samedayRs.time2?'–'+samedayRs.time2:''}</div>`
+              : `<button class="att-btn a-hadir ${status==='hadir'?'on':''}" onclick="openNoteModal('${attKey}','hadir','${s.name}','${attDateKey}')">✅</button>
             <button class="att-btn a-izin ${status==='izin'?'on':''}" onclick="openNoteModal('${attKey}','izin','${s.name}','${attDateKey}')">✋</button>
             <button class="att-btn a-alpa ${status==='alpa'?'on':''}" onclick="openNoteModal('${attKey}','alpa','${s.name}','${attDateKey}')">✗</button>
-            <button class="att-btn" onclick="openRescheduleModal('${s.name}','${s.day}',${sidx});event.stopPropagation()" title="Reschedule" style="${s._hasActiveReschedule?'background:#fff8e1;border-color:#f59e0b;color:#d97706':''}">🔄</button>
-            <button class="att-btn" onclick="openEdit(${sidx});event.stopPropagation()">✏️</button>
+            <button class="att-btn" onclick="openRescheduleModal('${s.name}','${s.day}',${sidx});event.stopPropagation()" title="Reschedule" style="${(s._hasActiveReschedule||s._isRescheduled)?'background:#fef3c7;border-color:#f59e0b;color:#d97706;font-weight:700':''}">🔄</button>
+            <button class="att-btn" onclick="openEdit(${sidx});event.stopPropagation()">✏️</button>`
+            }
             ${s.sheetLink?`<button class="att-btn sheet-btn-${sidx}" onclick="openSheetLinkByName('${s.name.replace(/'/g,"\'")}','${attDateKey}')" style="${localStorage.getItem('sheet_sent_'+attDateKey+'_'+s.name.replace(/[^a-zA-Z0-9]/g,'_'))?'background:#eafaf1;border-color:rgba(29,158,78,0.4)':'background:var(--blue-bg);border-color:rgba(0,113,227,0.3)'}">
               ${localStorage.getItem('sheet_sent_'+attDateKey+'_'+s.name.replace(/[^a-zA-Z0-9]/g,'_'))?'✅':'📨'}
             </button>`:''}
