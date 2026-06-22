@@ -1059,10 +1059,12 @@ function renderAbsensi(){
   }
   const dayS=getStudentsForDay(selectedDay, dateKey).sort((a,b)=>a.time.localeCompare(b.time));
 
-  const jadwal=dayS.length;
-  const hadirC=dayS.filter(s=>{const ak=s._attKey||s.name;const adk=s._extraDate||dateKey;return (attendance[adk]||{})[ak]==='hadir';}).length;
-  const izinC=dayS.filter(s=>{const ak=s._attKey||s.name;const adk=s._extraDate||dateKey;return (attendance[adk]||{})[ak]==='izin';}).length;
-  const alpaC=dayS.filter(s=>{const ak=s._attKey||s.name;const adk=s._extraDate||dateKey;return (attendance[adk]||{})[ak]==='alpa';}).length;
+  // Exclude kartu info saja (_sameday_reschedule) dari semua hitungan
+  const dayS_real=dayS.filter(s=>!s._sameday_reschedule);
+  const jadwal=dayS_real.length;
+  const hadirC=dayS_real.filter(s=>{const ak=s._attKey||s.name;const adk=s._extraDate||dateKey;return (s._isRescheduled||s._isExtra?(attendance[adk]||{}):(attendance[adk]||{}))[ak]==='hadir';}).length;
+  const izinC=dayS_real.filter(s=>{const ak=s._attKey||s.name;const adk=s._extraDate||dateKey;return (attendance[adk]||{})[ak]==='izin';}).length;
+  const alpaC=dayS_real.filter(s=>{const ak=s._attKey||s.name;const adk=s._extraDate||dateKey;return (attendance[adk]||{})[ak]==='alpa';}).length;
   const belumC=jadwal-hadirC-izinC-alpaC;
 
   const cardsHtml=dayS.length?dayS.map(s=>{
