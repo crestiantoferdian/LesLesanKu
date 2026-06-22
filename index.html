@@ -2506,8 +2506,10 @@ function renderKirim(){
   const hariName=todayName;
 
   // Filter hanya Hadir dan Alpa (termasuk reschedule & extra)
+  // Skip kartu jam asli yang sudah dipindah (_sameday_reschedule) agar tidak duplikat
   const rows=[];
   dayS.forEach(s=>{
+    if(s._sameday_reschedule) return; // kartu info saja, bukan sesi aktual
     const attKey=s._attKey||s.name;
     const attDateKey=s._extraDate||dateKey;
     const attForDate=attendance[attDateKey]||{};
