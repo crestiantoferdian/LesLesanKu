@@ -688,6 +688,7 @@ let editIdx=null;
 let noteStudent=null;
 let trackPeriod='bulan';
 let incomeHidden=localStorage.getItem('llk_income_hidden')==='1';
+let incomeProjection=false;
 let trackSort='terbaru';
 let trackSearch='';
 let viewingStudent=null; // for history detail
@@ -1069,45 +1070,54 @@ function renderAbsensi(){
     const isVokal=(s.instrument||'').toLowerCase().includes('vok');
     const sidx=s._originalIdx!==undefined?s._originalIdx:students.findIndex(x=>x.name===s.name);
     const attKey=s._attKey||s.name;
-    // For extra classes, use the extra date's attendance, not today's
+    // Reschedule & extra: pakai tanggal & attendance key yang benar
     const attDateKey=s._extraDate||dateKey;
     const attForDate=attendance[attDateKey]||{};
-    const status=(s._isExtra?attForDate[attKey]:att[attKey])||'belum';
+    // Reschedule (_isRescheduled) & extra (_isExtra) keduanya harus baca dari attForDate
+    const status=(s._isRescheduled||s._isExtra?attForDate[attKey]:att[attKey])||'belum';
     const noteKey=attDateKey+'_'+attKey;
     const note=attNotes[noteKey]||{};
+    // Gunakan jam reschedule jika ada, bukan jam asli
     const timeRange=s.time+(s.time2?'–'+s.time2:'');
     // Payment warning
     const totalSessions=countSessionsForBilling(s.name);
     const showPayWarn=totalSessions>0&&totalSessions%(s.payCycle||4)===0&&isToday;
     // Reschedule badges
     const isRescued=s._isRescheduled||false;
-    // Murid tampil di hari rutin tapi ada reschedule aktif
+    // Murid tampil di hari rutin tapi ada reschedule aktif ke hari lain
     const hasActiveReschedule=!isRescued&&!!(s._hasActiveReschedule);
     const rsInfo=s._rsInfo||null;
     const rescueDateFmt=rsInfo?(()=>{const d=new Date(rsInfo.date+'T00:00:00');const days=['Min','Sen','Sel','Rab','Kam','Jum','Sab'];return days[d.getDay()]+', '+d.getDate()+'/'+(d.getMonth()+1);})():'';
+    // Reschedule di hari yang sama (jam berbeda)
+    const samedayRs=s._sameday_reschedule||null;
     // Efek visual untuk izin & alpa
     const isIzin=status==='izin';
     const isAlpa=status==='alpa';
     const izinReason=note.reason||'';
     const alpaReason=note.reason||'';
     // Tentukan border, badge, warna
-    const borderLeft=hasActiveReschedule?'border-left:3px solid #f59e0b;'
+    const borderLeft=samedayRs?'border-left:3px solid #7c3aed;'
+      :hasActiveReschedule?'border-left:3px solid #f59e0b;'
       :isIzin?'border-left:3px solid #f97316;'
       :isAlpa?'border-left:3px solid #dc2626;':'';
-    const avatarOpacity=hasActiveReschedule||isIzin||isAlpa?'opacity:0.5;':'';
-    const badgeHtml=hasActiveReschedule
+    const avatarOpacity=samedayRs||hasActiveReschedule||isIzin||isAlpa?'opacity:0.5;':'';
+    const badgeHtml=samedayRs
+      ?'<div style="position:absolute;bottom:-2px;right:-2px;width:14px;height:14px;background:#7c3aed;border-radius:50%;font-size:9px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:900;border:1.5px solid #fff">🔄</div>'
+      :hasActiveReschedule
       ?'<div style="position:absolute;bottom:-2px;right:-2px;width:14px;height:14px;background:#f59e0b;border-radius:50%;font-size:9px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:900;border:1.5px solid #fff">!</div>'
       :isIzin
       ?'<div style="position:absolute;bottom:-2px;right:-2px;width:14px;height:14px;background:#f97316;border-radius:50%;font-size:9px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:900;border:1.5px solid #fff">✋</div>'
       :isAlpa
       ?'<div style="position:absolute;bottom:-2px;right:-2px;width:14px;height:14px;background:#dc2626;border-radius:50%;font-size:9px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:900;border:1.5px solid #fff">✗</div>'
       :'';
-    const nameColor=hasActiveReschedule||isIzin||isAlpa?'color:var(--muted);':'';
+    const nameColor=samedayRs||hasActiveReschedule||isIzin||isAlpa?'color:var(--muted);':'';
     const timeColor=hasActiveReschedule?'#f59e0b':isIzin?'#f97316':isAlpa?'#dc2626':status==='hadir'?'var(--blue)':'var(--text)';
     const timeFontSize=status==='belum'?'1.05rem':'1rem';
     const timeFontWeight=status==='belum'?'800':'700';
-    const timeDecor=hasActiveReschedule||isIzin||isAlpa?';text-decoration:line-through':'';
-    const infoRow=hasActiveReschedule
+    const timeDecor=samedayRs||hasActiveReschedule||isIzin||isAlpa?';text-decoration:line-through':'';
+    const infoRow=samedayRs
+      ?`<div style="font-size:0.72rem;color:#7c3aed;font-weight:700;margin-top:3px;display:flex;align-items:center;gap:4px">🔄 Diganti ke jam <b>${samedayRs.time}${samedayRs.time2?'–'+samedayRs.time2:''}</b></div>`
+      :hasActiveReschedule
       ?`<div style="font-size:0.72rem;color:#d97706;font-weight:700;margin-top:3px;display:flex;align-items:center;gap:4px">🔄 Pindah ke <b>${rescueDateFmt}</b>${rsInfo&&rsInfo.time?' · '+rsInfo.time+(rsInfo.time2?'–'+rsInfo.time2:''):''}</div>`
       :isIzin
       ?`<div style="font-size:0.72rem;color:#ea580c;font-weight:700;margin-top:3px;display:flex;align-items:center;gap:4px">✋ Izin${izinReason?' · <span style="font-weight:400">'+izinReason+'</span>':''}</div>`
@@ -1225,8 +1235,29 @@ function getStudentsForDay(dayName, dateKey){
     // Reschedule berbasis array per hari
     // Cek apakah ada reschedule untuk hari ini (dayName) yang jatuh di dateKey
     const rsForToday=(s.reschedules||[]).find(r=>r.date===dateKey);
+
+    // Cek apakah hari rutin murid ini (dayName) punya reschedule aktif di tanggal lain
+    const todayISO=todayStr();
+    const rsForThisDay=(s.reschedules||[]).find(r=>r.day===dayName&&r.date>=todayISO);
+
     if(rsForToday){
-      // Munculkan di tab hari apapun saat tanggal cocok
+      // Cek apakah reschedule di hari yang SAMA dengan jadwal asli
+      const isSameDay = rsForToday.day===dayName;
+      if(isSameDay){
+        // Tampilkan kartu asli dengan keterangan "diganti ke jam baru"
+        const isRegularDay=s.day===dayName||s.day2===dayName||s.day3===dayName||s.day4===dayName;
+        if(isRegularDay){
+          result.push(Object.assign({},s,{
+            _originalIdx:originalIdx,
+            _isRescheduled:false,
+            _isExtra:false,
+            _hasActiveReschedule:false,
+            _sameday_reschedule:rsForToday, // info untuk tampilkan "diganti ke jam X"
+            _rsInfo:null
+          }));
+        }
+      }
+      // Tampilkan kartu jam baru (reschedule)
       result.push(Object.assign({},s,{
         time:rsForToday.time||s.time,
         time2:rsForToday.time2||s.time2||'',
@@ -1234,14 +1265,10 @@ function getStudentsForDay(dayName, dateKey){
         _isRescheduled:true,
         _isExtra:false,
         _rescheduleDay:rsForToday.day,
-        _extraDate:rsForToday.date  // gunakan tanggal reschedule untuk simpan absensi
+        _extraDate:rsForToday.date
       }));
       return;
     }
-
-    // Cek apakah hari rutin murid ini (dayName) punya reschedule aktif di tanggal lain
-    const todayISO=todayStr();
-    const rsForThisDay=(s.reschedules||[]).find(r=>r.day===dayName&&r.date>=todayISO);
 
     const isRegular=s.day===dayName;
     if(isRegular){
@@ -1956,12 +1983,15 @@ function renderTrack(){
       <div id="incomeCard" style="background:linear-gradient(135deg,var(--red),var(--red2));border-radius:16px;padding:16px 18px;margin-bottom:16px;color:#fff;box-shadow:0 4px 14px rgba(0,0,0,0.12)">
         <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px">
           <div style="flex:1;min-width:0">
-            <div style="font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;opacity:0.85;margin-bottom:4px">💰 Estimasi Penghasilan · ${trackPeriod.charAt(0).toUpperCase()+trackPeriod.slice(1)}</div>
+            <div id="incomeProjLabel" style="font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;opacity:0.85;margin-bottom:4px">💰 Estimasi Penghasilan · ${trackPeriod.charAt(0).toUpperCase()+trackPeriod.slice(1)}</div>
             <div id="incomeAmount" style="font-size:1.6rem;font-weight:800">${incomeHidden?'••••••••':'Rp '+totalPenghasilan.toLocaleString('id-ID')}</div>
-            <div style="font-size:0.72rem;opacity:0.85;margin-top:2px">Hadir + Alpa × tarif per siswa</div>
+            <div id="incomeProjSub" style="font-size:0.72rem;opacity:0.85;margin-top:2px">Hadir + Alpa × tarif per siswa</div>
           </div>
           <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0">
-            <button id="incomeToggleBtn" onclick="toggleIncomeVisibility()" style="background:rgba(255,255,255,0.18);border:none;width:30px;height:30px;border-radius:9px;color:#fff;font-size:0.95rem;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0">${incomeHidden?'🙈':'👁️'}</button>
+            <div style="display:flex;gap:6px">
+              <button id="incomeProjectionBtn" onclick="toggleIncomeProjection()" title="Proyeksi jika semua hadir sampai akhir periode" style="background:rgba(255,255,255,0.18);border:none;width:30px;height:30px;border-radius:9px;color:#fff;font-size:0.95rem;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0">🔮</button>
+              <button id="incomeToggleBtn" onclick="toggleIncomeVisibility()" style="background:rgba(255,255,255,0.18);border:none;width:30px;height:30px;border-radius:9px;color:#fff;font-size:0.95rem;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0">${incomeHidden?'🙈':'👁️'}</button>
+            </div>
             <div id="trackStatSub" style="font-size:1.4rem;font-weight:800;opacity:0.95;text-align:right">${totalHadir+totalAlpa}</div>
           </div>
         </div>
@@ -2151,20 +2181,42 @@ function buildDateDetail(dk){
 
 function refreshTrackCards(){
   document.getElementById('trackCards').innerHTML=buildTrackCards();
-  const {totalHadir,totalIzin,totalAlpa,totalPenghasilan}=calcTrackTotals();
-  // Hitung total sesi hadir + alpa di periode ini
+  const {totalHadir,totalIzin,totalAlpa}=calcTrackTotals();
   const badge=document.getElementById('trackTotalBadge');
   if(badge) badge.textContent=totalHadir+totalAlpa;
-  const incomeAmt=document.getElementById('incomeAmount');
-  if(incomeAmt) incomeAmt.textContent=incomeHidden?'••••••••':'Rp '+totalPenghasilan.toLocaleString('id-ID');
   const sh=document.getElementById('trackStatHadir');
   const si=document.getElementById('trackStatIzin');
   const sa=document.getElementById('trackStatAlpa');
   if(sh) sh.textContent=totalHadir;
   if(si) si.textContent=totalIzin;
   if(sa) sa.textContent=totalAlpa;
+  updateIncomeDisplay();
+}
+
+function toggleIncomeProjection(){
+  incomeProjection=!incomeProjection;
+  const btn=document.getElementById('incomeProjectionBtn');
+  if(btn){
+    btn.style.background=incomeProjection?'rgba(255,255,255,0.5)':'rgba(255,255,255,0.18)';
+    btn.title=incomeProjection?'Mode proyeksi aktif':'Mode proyeksi nonaktif';
+  }
+  const label=document.getElementById('incomeProjLabel');
+  if(label) label.textContent=incomeProjection?'PROYEKSI AKHIR '+trackPeriod.toUpperCase():'ESTIMASI PENGHASILAN · '+trackPeriod.charAt(0).toUpperCase()+trackPeriod.slice(1);
+  updateIncomeDisplay();
+}
+
+function updateIncomeDisplay(){
+  const {totalHadir,totalIzin,totalAlpa,totalPenghasilan}=calcTrackTotals();
+  const projIncome=incomeProjection?calcProjectionIncome():0;
+  const projSessions=incomeProjection?calcProjectionSessions():0;
+  const displayIncome=totalPenghasilan+projIncome;
+  const displaySessions=(totalHadir+totalAlpa)+projSessions;
+  const incomeAmt=document.getElementById('incomeAmount');
+  if(incomeAmt) incomeAmt.textContent=incomeHidden?'••••••••':'Rp '+displayIncome.toLocaleString('id-ID');
   const sub=document.getElementById('trackStatSub');
-  if(sub) sub.textContent=totalHadir+totalAlpa;
+  if(sub) sub.textContent=displaySessions;
+  const subLabel=document.getElementById('incomeProjSub');
+  if(subLabel) subLabel.textContent=incomeProjection?'(aktual + proyeksi jika semua hadir)':'Hadir + Alpa × tarif per siswa';
 }
 
 function toggleIncomeVisibility(){
@@ -2175,6 +2227,83 @@ function toggleIncomeVisibility(){
   const {totalPenghasilan}=calcTrackTotals();
   const incomeAmt=document.getElementById('incomeAmount');
   if(incomeAmt) incomeAmt.textContent=incomeHidden?'••••••••':'Rp '+totalPenghasilan.toLocaleString('id-ID');
+}
+
+function calcProjectionSessions(){
+  // Hitung sesi yang BELUM terjadi di periode ini (hari > hari ini)
+  const now=new Date(); now.setHours(0,0,0,0);
+  const todayStr=now.toISOString().slice(0,10);
+
+  // Tentukan periode
+  let fromDate=null, toDate=null;
+  const n=new Date();
+  if(trackPeriod==='minggu'){
+    const diff=n.getDay()===0?-6:1-n.getDay();
+    fromDate=new Date(n); fromDate.setDate(n.getDate()+diff); fromDate.setHours(0,0,0,0);
+    toDate=new Date(fromDate); toDate.setDate(fromDate.getDate()+6);
+  } else if(trackPeriod==='bulan'){
+    fromDate=new Date(n.getFullYear(),n.getMonth(),1);
+    toDate=new Date(n.getFullYear(),n.getMonth()+1,0);
+  } else if(trackPeriod==='tahun'){
+    fromDate=new Date(n.getFullYear(),0,1);
+    toDate=new Date(n.getFullYear(),11,31);
+  } else {
+    // Semua — tidak ada proyeksi masa depan yang bermakna
+    return 0;
+  }
+
+  let projectedSessions=0;
+  const filtered=students.filter(s=>s.name.toLowerCase().includes(trackSearch.toLowerCase()));
+
+  // Loop setiap hari dari besok sampai akhir periode
+  const cursor=new Date(now); cursor.setDate(cursor.getDate()+1);
+  while(cursor<=toDate){
+    const dk=cursor.toISOString().slice(0,10);
+    const dayName=DAYS[DAYS_JS.indexOf(cursor.getDay())];
+    filtered.forEach(s=>{
+      // Cek apakah siswa punya jadwal di hari ini
+      const days=[s.day,s.day2,s.day3,s.day4].filter(Boolean);
+      const hasExtraToday=s.extraDates&&s.extraDates.some(ed=>ed.date===dk);
+      const hasReschedule=(s.reschedules||[]).some(r=>r.date===dk);
+      if(days.includes(dayName)||hasExtraToday||hasReschedule) projectedSessions++;
+    });
+    cursor.setDate(cursor.getDate()+1);
+  }
+  return projectedSessions;
+}
+
+function calcProjectionIncome(){
+  const filtered=students.filter(s=>s.name.toLowerCase().includes(trackSearch.toLowerCase()));
+  let total=0;
+  const n=new Date();
+  let fromDate=null, toDate=null;
+  if(trackPeriod==='minggu'){
+    const diff=n.getDay()===0?-6:1-n.getDay();
+    fromDate=new Date(n); fromDate.setDate(n.getDate()+diff); fromDate.setHours(0,0,0,0);
+    toDate=new Date(fromDate); toDate.setDate(fromDate.getDate()+6);
+  } else if(trackPeriod==='bulan'){
+    fromDate=new Date(n.getFullYear(),n.getMonth(),1);
+    toDate=new Date(n.getFullYear(),n.getMonth()+1,0);
+  } else if(trackPeriod==='tahun'){
+    fromDate=new Date(n.getFullYear(),0,1);
+    toDate=new Date(n.getFullYear(),11,31);
+  } else { return 0; }
+
+  const now=new Date(); now.setHours(0,0,0,0);
+  const cursor=new Date(now); cursor.setDate(cursor.getDate()+1);
+  while(cursor<=toDate){
+    const dk=cursor.toISOString().slice(0,10);
+    const dayName=DAYS[DAYS_JS.indexOf(cursor.getDay())];
+    filtered.forEach(s=>{
+      const rate=s.rate||40000;
+      const days=[s.day,s.day2,s.day3,s.day4].filter(Boolean);
+      const hasExtraToday=s.extraDates&&s.extraDates.some(ed=>ed.date===dk);
+      const hasReschedule=(s.reschedules||[]).some(r=>r.date===dk);
+      if(days.includes(dayName)||hasExtraToday||hasReschedule) total+=rate;
+    });
+    cursor.setDate(cursor.getDate()+1);
+  }
+  return total;
 }
 
 function calcTrackTotals(){
