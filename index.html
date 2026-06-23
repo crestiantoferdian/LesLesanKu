@@ -689,6 +689,7 @@ let noteStudent=null;
 let trackPeriod='bulan';
 let incomeHidden=localStorage.getItem('llk_income_hidden')==='1';
 let incomeProjection=false;
+let trackStatusFilter=null; // null=semua, 'hadir'/'izin'/'alpa'
 let trackSort='terbaru';
 let trackSearch='';
 let viewingStudent=null; // for history detail
@@ -2002,15 +2003,15 @@ function renderTrack(){
         </div>
       </div>
       <div id="trackStatBox" style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px">
-        <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px 8px;text-align:center">
+        <div id="statBoxHadir" onclick="setTrackStatusFilter('hadir')" style="background:${trackStatusFilter==='hadir'?'#dcfce7':'var(--card)'};border:${trackStatusFilter==='hadir'?'2px solid var(--hadir)':'1px solid var(--border)'};border-radius:14px;padding:14px 8px;text-align:center;cursor:pointer;transition:all 0.15s">
           <div id="trackStatHadir" style="font-size:1.5rem;font-weight:800;color:var(--hadir)">${totalHadir}</div>
           <div style="font-size:0.68rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.04em;margin-top:2px">Hadir</div>
         </div>
-        <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px 8px;text-align:center">
+        <div id="statBoxIzin" onclick="setTrackStatusFilter('izin')" style="background:${trackStatusFilter==='izin'?'#fff7ed':'var(--card)'};border:${trackStatusFilter==='izin'?'2px solid #f97316':'1px solid var(--border)'};border-radius:14px;padding:14px 8px;text-align:center;cursor:pointer;transition:all 0.15s">
           <div id="trackStatIzin" style="font-size:1.5rem;font-weight:800;color:#f97316">${totalIzin}</div>
           <div style="font-size:0.68rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.04em;margin-top:2px">Izin</div>
         </div>
-        <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px 8px;text-align:center">
+        <div id="statBoxAlpa" onclick="setTrackStatusFilter('alpa')" style="background:${trackStatusFilter==='alpa'?'#fef2f2':'var(--card)'};border:${trackStatusFilter==='alpa'?'2px solid var(--alpa)':'1px solid var(--border)'};border-radius:14px;padding:14px 8px;text-align:center;cursor:pointer;transition:all 0.15s">
           <div id="trackStatAlpa" style="font-size:1.5rem;font-weight:800;color:var(--alpa)">${totalAlpa}</div>
           <div style="font-size:0.68rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.04em;margin-top:2px">Alpa</div>
         </div>
@@ -2123,8 +2124,11 @@ function buildDateDetail(dk){
     </div>`;
   }
 
+  const todayDk=todayStr();
+  const isPastDay=dk<todayDk;
   let hadirC=0,izinC=0,alpaC=0,belumC=0;
   const rows=scheduled.map(s=>{
+    const isSamedayRs=!!s._sameday_reschedule;
     const attKey=s._attKey||s.name;
     const attDateKey=s._extraDate||dk;
     const sidx=s._originalIdx!==undefined?s._originalIdx:students.indexOf(s);
@@ -2136,23 +2140,51 @@ function buildDateDetail(dk){
     const safeDk=attDateKey.replace(/'/g,"\\'");
     const safeName=s.name.replace(/'/g,"\\'");
 
-    if(status==='hadir') hadirC++;
-    else if(status==='izin') izinC++;
-    else if(status==='alpa') alpaC++;
-    else belumC++;
+    // Skip sameday_reschedule dari hitungan
+    if(!isSamedayRs){
+      if(status==='hadir') hadirC++;
+      else if(status==='izin') izinC++;
+      else if(status==='alpa') alpaC++;
+      else belumC++;
+    }
+
+    // Kartu sameday reschedule: dimmed, tidak bisa diklik, seperti Izin
+    if(isSamedayRs){
+      const rs=s._sameday_reschedule;
+      return `<div class="s-item" style="margin:0 0 1px;border-radius:0;border-left:3px solid #7c3aed;cursor:default">
+        <div class="s-avatar ${isVokal?'vocal':''}" style="opacity:0.4;position:relative">${icon}</div>
+        <div class="s-body">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:4px">
+            <div class="s-name" style="color:var(--muted);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${s.name}</div>
+            <div style="flex-shrink:0"><span style="color:#7c3aed;text-decoration:line-through">${s.time}${s.time2?'–'+s.time2:''}</span></div>
+          </div>
+          <div style="font-size:0.72rem;color:#7c3aed;font-weight:600;margin-top:2px">🔄 Diganti ke jam ${rs.time}${rs.time2?'–'+rs.time2:''}</div>
+        </div>
+      </div>`;
+    }
 
     const isIzin=status==='izin';
-    const borderStyle=isIzin?'border-left:3px solid var(--izin);':'';
-    const avatarStyle=isIzin?'opacity:0.5;':'';
-    const nameStyle=isIzin?'color:var(--muted);':'';
-    const timeStyle=isIzin?'color:#f59e0b;text-decoration:line-through;':'color:var(--blue);';
+    const isAlpa=status==='alpa';
+    const borderStyle=isIzin?'border-left:3px solid var(--izin);':isAlpa?'border-left:3px solid #dc2626;':'';
+    const avatarStyle=isIzin||isAlpa?'opacity:0.5;':'';
+    const nameStyle=isIzin||isAlpa?'color:var(--muted);':'';
+    const timeStyle=isIzin?'color:#f59e0b;text-decoration:line-through;':isAlpa?'color:#dc2626;text-decoration:line-through;':'color:var(--blue);';
 
     let noteHtml='';
     if(status==='hadir'&&note.progress) noteHtml=`<div style="font-size:0.7rem;color:var(--hadir);margin-top:3px">📝 ${note.progress}</div>`;
     if(status==='alpa'&&note.reason) noteHtml=`<div style="font-size:0.7rem;color:var(--alpa);margin-top:3px">✗ ${note.reason}</div>`;
     if(status==='izin') noteHtml=`<div style="font-size:0.72rem;color:#d97706;font-weight:600;margin-top:3px">✋ Izin${note.reason?' · '+note.reason:''}</div>`;
 
-    return `<div class="s-item status-${status}" style="margin:0 0 1px;border-radius:0;${borderStyle}" onclick="this.classList.toggle('expanded')">
+    const attBtns=!isPastDay?`
+        <div class="att-btns" onclick="event.stopPropagation()" style="margin-top:8px">
+          <button class="att-btn a-hadir ${status==='hadir'?'on':''}" onclick="openNoteModal('${safeKey}','hadir','${safeName}','${safeDk}');setTimeout(renderTrack,300)">✅</button>
+          <button class="att-btn a-izin ${status==='izin'?'on':''}" onclick="openNoteModal('${safeKey}','izin','${safeName}','${safeDk}');setTimeout(renderTrack,300)">✋</button>
+          <button class="att-btn a-alpa ${status==='alpa'?'on':''}" onclick="openNoteModal('${safeKey}','alpa','${safeName}','${safeDk}');setTimeout(renderTrack,300)">✗</button>
+          <button class="att-btn" onclick="openTrackEditModal('${safeKey}','${status||'hadir'}','${safeName}','${safeDk}')">✏️</button>
+          ${status!=='belum'?`<button class="att-btn" onclick="deleteAttendance('${safeName}','${safeDk}')" style="border-color:rgba(220,38,38,0.25);background:#fff5f5;color:var(--alpa)">🗑</button>`:''}
+        </div>`:'';
+
+    return `<div class="s-item status-${status}" style="margin:0 0 1px;border-radius:0;${borderStyle};cursor:pointer" onclick="toggleSItem(this)">
       <div class="s-avatar ${isVokal?'vocal':''}" style="${avatarStyle}position:relative">${icon}</div>
       <div class="s-body">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:4px">
@@ -2162,13 +2194,7 @@ function buildDateDetail(dk){
         ${s._isRescheduled?'<div style="font-size:0.72rem;color:var(--blue);font-weight:600;margin-top:2px">🔄 Reschedule</div>':''}
         ${s._isExtra?`<div style="margin-top:4px"><span class="s-pill" style="background:#eef2ff;color:var(--blue);border-color:rgba(37,99,235,0.3)">➕ ${s._extraNote||'Tambahan Kelas'}</span></div>`:''}
         ${noteHtml}
-        <div class="att-btns" onclick="event.stopPropagation()" style="margin-top:8px">
-          <button class="att-btn a-hadir ${status==='hadir'?'on':''}" onclick="openNoteModal('${safeKey}','hadir','${safeName}','${safeDk}');setTimeout(renderTrack,300)">✅</button>
-          <button class="att-btn a-izin ${status==='izin'?'on':''}" onclick="openNoteModal('${safeKey}','izin','${safeName}','${safeDk}');setTimeout(renderTrack,300)">✋</button>
-          <button class="att-btn a-alpa ${status==='alpa'?'on':''}" onclick="openNoteModal('${safeKey}','alpa','${safeName}','${safeDk}');setTimeout(renderTrack,300)">✗</button>
-          <button class="att-btn" onclick="openTrackEditModal('${safeKey}','${status||'hadir'}','${safeName}','${safeDk}')">✏️</button>
-          ${status!=='belum'?`<button class="att-btn" onclick="deleteAttendance('${safeName}','${safeDk}')" style="border-color:rgba(220,38,38,0.25);background:#fff5f5;color:var(--alpa)">🗑</button>`:''}
-        </div>
+        ${attBtns}
       </div>
     </div>`;
   });
@@ -2356,7 +2382,21 @@ function calcTrackTotals(){
 
 // (badge track dipindah ke samping judul Track Record)
 
-function setPeriod(p){trackPeriod=p;renderTrack()}
+function setPeriod(p){trackPeriod=p;trackStatusFilter=null;renderTrack()}
+
+function setTrackStatusFilter(status){
+  trackStatusFilter = trackStatusFilter===status ? null : status;
+  refreshTrackCards();
+  // Update visual state of stat boxes
+  ['hadir','izin','alpa'].forEach(s=>{
+    const box=document.getElementById('statBox'+s.charAt(0).toUpperCase()+s.slice(1));
+    if(!box) return;
+    const isActive=trackStatusFilter===s;
+    const colors={hadir:['#dcfce7','var(--hadir)'],izin:['#fff7ed','#f97316'],alpa:['#fef2f2','var(--alpa)']};
+    box.style.background=isActive?colors[s][0]:'var(--card)';
+    box.style.border=isActive?`2px solid ${colors[s][1]}`:'1px solid var(--border)';
+  });
+}
 
 function buildTrackCards(){
   const now=new Date();
@@ -2400,6 +2440,10 @@ function buildTrackCards(){
   });
 
   let filtered=stats.filter(x=>x.s.name.toLowerCase().includes(trackSearch.toLowerCase()));
+  // Filter by status jika ada
+  if(trackStatusFilter==='hadir') filtered=filtered.filter(x=>x.hadir>0);
+  else if(trackStatusFilter==='izin') filtered=filtered.filter(x=>x.izin>0);
+  else if(trackStatusFilter==='alpa') filtered=filtered.filter(x=>x.alpa>0);
   if(trackSort==='izin') filtered.sort((a,b)=>b.izin-a.izin||b.alpa-a.alpa);
   else if(trackSort==='alpa') filtered.sort((a,b)=>b.alpa-a.alpa||b.izin-a.izin);
   else if(trackSort==='hadir') filtered.sort((a,b)=>b.hadir-a.hadir);
