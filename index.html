@@ -156,6 +156,8 @@ body{
 .s-note-preview{font-size:0.7rem;color:var(--blue);margin-top:5px;font-style:italic;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:190px}
 .att-btns{display:flex;gap:4px;flex-shrink:0;align-items:center;flex-wrap:wrap;overflow:hidden;max-height:0;opacity:0;transition:max-height 0.28s cubic-bezier(.4,0,.2,1),opacity 0.22s ease,margin-top 0.22s ease;margin-top:0}
 .s-item.expanded .att-btns{max-height:80px;opacity:1;margin-top:8px}
+.s-item .past-info{max-height:0;opacity:0;overflow:hidden;transition:max-height 0.25s ease,opacity 0.2s ease}
+.s-item.expanded .past-info{max-height:120px;opacity:1;margin-top:8px}
 .s-avatar{cursor:pointer}
 .s-item.expanded .s-avatar{box-shadow:0 0 0 2.5px var(--red)}
 .att-btn{
@@ -2024,7 +2026,7 @@ function renderTrack(){
     <div class="track-wrap">
       ${modeBar}
       <div class="period-bar">
-        ${['minggu','bulan','tahun','semua'].map(p=>`<button class="period-btn ${trackPeriod===p?'active':''}" onclick="setPeriod('${p}')">${p.charAt(0).toUpperCase()+p.slice(1)}</button>`).join('')}
+        ${['hari','minggu','bulan','tahun','semua'].map(p=>`<button class="period-btn ${trackPeriod===p?'active':''}" onclick="setPeriod('${p}')">${p==='hari'?'Hari Ini':p.charAt(0).toUpperCase()+p.slice(1)}</button>`).join('')}
       </div>
       <div class="track-controls">
         <div class="track-search"><span style="color:var(--muted)">🔍</span><input type="text" placeholder="Cari nama..." value="${trackSearch}" oninput="trackSearch=this.value;refreshTrackCards()"/></div>
@@ -2175,6 +2177,8 @@ function buildDateDetail(dk){
     if(status==='alpa'&&note.reason) noteHtml=`<div style="font-size:0.7rem;color:var(--alpa);margin-top:3px">✗ ${note.reason}</div>`;
     if(status==='izin') noteHtml=`<div style="font-size:0.72rem;color:#d97706;font-weight:600;margin-top:3px">✋ Izin${note.reason?' · '+note.reason:''}</div>`;
 
+    const statusColors={hadir:'var(--hadir)',izin:'#f97316',alpa:'#dc2626',belum:'var(--muted)'};
+    const statusLabels={hadir:'✅ Hadir',izin:'✋ Izin',alpa:'✗ Alpa',belum:'— Belum'};
     const attBtns=!isPastDay?`
         <div class="att-btns" onclick="event.stopPropagation()" style="margin-top:8px">
           <button class="att-btn a-hadir ${status==='hadir'?'on':''}" onclick="openNoteModal('${safeKey}','hadir','${safeName}','${safeDk}');setTimeout(renderTrack,300)">✅</button>
@@ -2182,9 +2186,22 @@ function buildDateDetail(dk){
           <button class="att-btn a-alpa ${status==='alpa'?'on':''}" onclick="openNoteModal('${safeKey}','alpa','${safeName}','${safeDk}');setTimeout(renderTrack,300)">✗</button>
           <button class="att-btn" onclick="openTrackEditModal('${safeKey}','${status||'hadir'}','${safeName}','${safeDk}')">✏️</button>
           ${status!=='belum'?`<button class="att-btn" onclick="deleteAttendance('${safeName}','${safeDk}')" style="border-color:rgba(220,38,38,0.25);background:#fff5f5;color:var(--alpa)">🗑</button>`:''}
-        </div>`:'';
+        </div>`
+      :`<div class="past-info" onclick="event.stopPropagation()" style="background:var(--bg);border-radius:10px;padding:8px 12px;border:1px solid var(--border)">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+            <div style="font-size:0.78rem;font-weight:700;color:${statusColors[status]||'var(--muted)'}">${statusLabels[status]||status}</div>
+            ${status!=='belum'?`<button class="att-btn" onclick="openTrackEditModal('${safeKey}','${status||'hadir'}','${safeName}','${safeDk}')" style="width:28px;height:28px;font-size:0.75rem">✏️</button>`:''}
+          </div>
+          ${note.progress?`<div style="font-size:0.75rem;color:var(--text2)">📝 ${note.progress}</div>`:''}
+          ${note.reason?`<div style="font-size:0.75rem;color:var(--muted)">💬 ${note.reason}</div>`:''}
+          ${!note.progress&&!note.reason?'<div style="font-size:0.75rem;color:var(--muted);font-style:italic">Tidak ada catatan</div>':''}
+        </div>`;
 
-    return `<div class="s-item status-${status}" style="margin:0 0 1px;border-radius:0;${borderStyle};cursor:pointer" onclick="toggleSItem(this)">
+    // Di hari lewat: klik buka profil siswa. Di hari ini/akan datang: expand untuk tombol aksi
+    const cardOnclick=isPastDay
+      ?`openHistoryDetail('${safeName}','track')`
+      :`toggleSItem(this)`;
+    return `<div class="s-item status-${status}" style="margin:0 0 1px;border-radius:0;${borderStyle};cursor:pointer" onclick="${cardOnclick}">
       <div class="s-avatar ${isVokal?'vocal':''}" style="${avatarStyle}position:relative">${icon}</div>
       <div class="s-body">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:4px">
@@ -2268,7 +2285,25 @@ function calcProjectionSessions(){
   // Tentukan periode
   let fromDate=null, toDate=null;
   const n=new Date();
-  if(trackPeriod==='minggu'){
+  if(trackPeriod==='semua'){
+    return 0;
+  } else if(trackPeriod==='hari'){
+    // Proyeksi hari ini = siswa yang BELUM diabsen × tarif
+    const todayDk=now.toISOString().slice(0,10);
+    const todayName=DAYS[DAYS_JS.indexOf(now.getDay())];
+    let sessions=0;
+    const filteredH=students.filter(s=>s.name.toLowerCase().includes(trackSearch.toLowerCase()));
+    filteredH.forEach(s=>{
+      const days=[s.day,s.day2,s.day3,s.day4].filter(Boolean);
+      const hasExtra=s.extraDates&&s.extraDates.some(ed=>ed.date===todayDk);
+      const hasReschedule=(s.reschedules||[]).some(r=>r.date===todayDk);
+      if(!days.includes(todayName)&&!hasExtra&&!hasReschedule) return;
+      const attKey=s.name;
+      const todayAtt=(attendance[todayDk]||{})[attKey];
+      if(!todayAtt||todayAtt==='belum') sessions++;
+    });
+    return sessions;
+  } else if(trackPeriod==='minggu'){
     const diff=n.getDay()===0?-6:1-n.getDay();
     fromDate=new Date(n); fromDate.setDate(n.getDate()+diff); fromDate.setHours(0,0,0,0);
     toDate=new Date(fromDate); toDate.setDate(fromDate.getDate()+6);
@@ -2278,9 +2313,6 @@ function calcProjectionSessions(){
   } else if(trackPeriod==='tahun'){
     fromDate=new Date(n.getFullYear(),0,1);
     toDate=new Date(n.getFullYear(),11,31);
-  } else {
-    // Semua — tidak ada proyeksi masa depan yang bermakna
-    return 0;
   }
 
   let projectedSessions=0;
@@ -2308,7 +2340,21 @@ function calcProjectionIncome(){
   let total=0;
   const n=new Date();
   let fromDate=null, toDate=null;
-  if(trackPeriod==='minggu'){
+  if(trackPeriod==='hari'){
+    // Proyeksi hari ini = siswa belum diabsen × tarif
+    const todayDk=n.toISOString().slice(0,10);
+    const todayName=DAYS[DAYS_JS.indexOf(n.getDay())];
+    filtered.forEach(s=>{
+      const rate=s.rate||40000;
+      const days=[s.day,s.day2,s.day3,s.day4].filter(Boolean);
+      const hasExtra=s.extraDates&&s.extraDates.some(ed=>ed.date===todayDk);
+      const hasReschedule=(s.reschedules||[]).some(r=>r.date===todayDk);
+      if(!days.includes(todayName)&&!hasExtra&&!hasReschedule) return;
+      const todayAtt=(attendance[todayDk]||{})[s.name];
+      if(!todayAtt||todayAtt==='belum') total+=rate;
+    });
+    return total;
+  } else if(trackPeriod==='minggu'){
     const diff=n.getDay()===0?-6:1-n.getDay();
     fromDate=new Date(n); fromDate.setDate(n.getDate()+diff); fromDate.setHours(0,0,0,0);
     toDate=new Date(fromDate); toDate.setDate(fromDate.getDate()+6);
@@ -2320,6 +2366,7 @@ function calcProjectionIncome(){
     toDate=new Date(n.getFullYear(),11,31);
   } else { return 0; }
 
+  if(!fromDate||!toDate) return 0;
   const now=new Date(); now.setHours(0,0,0,0);
   const cursor=new Date(now); cursor.setDate(cursor.getDate()+1);
   while(cursor<=toDate){
@@ -2340,7 +2387,11 @@ function calcProjectionIncome(){
 function calcTrackTotals(){
   const now=new Date();
   let fromDate=null;
-  if(trackPeriod==='minggu'){
+  if(trackPeriod==='hari'){
+    fromDate=new Date(now.getFullYear(),now.getMonth(),now.getDate());
+    const toD=new Date(fromDate); toD.setDate(toD.getDate()+1); 
+    // toDate only used in projection, set as end of today
+  } else if(trackPeriod==='minggu'){
     const day=now.getDay();const diff=day===0?-6:1-day;
     fromDate=new Date(now);fromDate.setDate(now.getDate()+diff);fromDate.setHours(0,0,0,0);
   } else if(trackPeriod==='bulan'){
