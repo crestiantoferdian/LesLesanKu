@@ -2462,7 +2462,7 @@ function buildTrackCards(){
   }
 
   const stats=students.map(s=>{
-    let hadir=0,izin=0,alpa=0,lastHadirDate=null;
+    let hadir=0,izin=0,alpa=0,lastHadirDate=null,lastHadirKey=null;
     Object.entries(attendance).forEach(([dk,dayAtt])=>{
       const d=new Date(dk+'T00:00:00');
       if(fromDate&&d<fromDate) return;
@@ -2473,21 +2473,23 @@ function buildTrackCards(){
       const isDay4=s.day4&&s.day4===dayName;
       const isRescheduleDate=(s.reschedules||[]).some(r=>r.date===dk);
       if(dayName!==s.day&&!hasExtra&&!isDay2&&!isDay3&&!isDay4&&!isRescheduleDate) return;
-      // Regular + reschedule session
+      // Regular + reschedule session — gunakan dk+jam untuk sort yang akurat
       const st=dayAtt[s.name];
-      if(st==='hadir'){ hadir++; if(!lastHadirDate||dk>lastHadirDate) lastHadirDate=dk; }
+      const sortKey=dk+'T'+(s.time||'00:00');
+      if(st==='hadir'){ hadir++; if(!lastHadirKey||sortKey>lastHadirKey){lastHadirDate=dk;lastHadirKey=sortKey;} }
       else if(st==='izin') izin++;
       else if(st==='alpa') alpa++;
       // Extra sessions on this date
       if(s.extraDates) s.extraDates.forEach((ed,ei)=>{
         if(ed.date!==dk) return;
         const est=dayAtt[s.name+'_extra_'+ei];
-        if(est==='hadir'){ hadir++; if(!lastHadirDate||dk>lastHadirDate) lastHadirDate=dk; }
+        const extraKey=dk+'T'+(ed.time||s.time||'00:00');
+        if(est==='hadir'){ hadir++; if(!lastHadirKey||extraKey>lastHadirKey){lastHadirDate=dk;lastHadirKey=extraKey;} }
         else if(est==='izin') izin++;
         else if(est==='alpa') alpa++;
       });
     });
-    return {s,hadir,izin,alpa,lastHadirDate};
+    return {s,hadir,izin,alpa,lastHadirDate,lastHadirKey};
   });
 
   let filtered=stats.filter(x=>x.s.name.toLowerCase().includes(trackSearch.toLowerCase()));
@@ -2498,7 +2500,7 @@ function buildTrackCards(){
   if(trackSort==='izin') filtered.sort((a,b)=>b.izin-a.izin||b.alpa-a.alpa);
   else if(trackSort==='alpa') filtered.sort((a,b)=>b.alpa-a.alpa||b.izin-a.izin);
   else if(trackSort==='hadir') filtered.sort((a,b)=>b.hadir-a.hadir);
-  else if(trackSort==='terbaru') filtered.sort((a,b)=>(b.lastHadirDate||'').localeCompare(a.lastHadirDate||''));
+  else if(trackSort==='terbaru') filtered.sort((a,b)=>(b.lastHadirKey||'').localeCompare(a.lastHadirKey||''));
   else filtered.sort((a,b)=>a.s.name.localeCompare(b.s.name));
 
   if(!filtered.length) return `<div class="empty"><div class="empty-icon">🔍</div><div class="empty-t">Tidak ditemukan</div></div>`;
