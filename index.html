@@ -2318,17 +2318,24 @@ function calcProjectionSessions(){
   let projectedSessions=0;
   const filtered=students.filter(s=>s.name.toLowerCase().includes(trackSearch.toLowerCase()));
 
-  // Loop setiap hari dari besok sampai akhir periode
-  const cursor=new Date(now); cursor.setDate(cursor.getDate()+1);
+  // Loop setiap hari MULAI HARI INI sampai akhir periode
+  const cursor=new Date(now);
   while(cursor<=toDate){
     const dk=cursor.toISOString().slice(0,10);
     const dayName=DAYS[DAYS_JS.indexOf(cursor.getDay())];
     filtered.forEach(s=>{
-      // Cek apakah siswa punya jadwal di hari ini
       const days=[s.day,s.day2,s.day3,s.day4].filter(Boolean);
       const hasExtraToday=s.extraDates&&s.extraDates.some(ed=>ed.date===dk);
       const hasReschedule=(s.reschedules||[]).some(r=>r.date===dk);
-      if(days.includes(dayName)||hasExtraToday||hasReschedule) projectedSessions++;
+      if(!days.includes(dayName)&&!hasExtraToday&&!hasReschedule) return;
+      // Untuk hari ini: hanya hitung yang BELUM diabsen
+      if(dk===todayStr){
+        const att=(attendance[dk]||{})[s.name];
+        if(!att||att==='belum') projectedSessions++;
+      } else {
+        // Hari mendatang: semua dianggap akan hadir
+        projectedSessions++;
+      }
     });
     cursor.setDate(cursor.getDate()+1);
   }
@@ -2368,7 +2375,8 @@ function calcProjectionIncome(){
 
   if(!fromDate||!toDate) return 0;
   const now=new Date(); now.setHours(0,0,0,0);
-  const cursor=new Date(now); cursor.setDate(cursor.getDate()+1);
+  const todayDkX=now.toISOString().slice(0,10);
+  const cursor=new Date(now);
   while(cursor<=toDate){
     const dk=cursor.toISOString().slice(0,10);
     const dayName=DAYS[DAYS_JS.indexOf(cursor.getDay())];
@@ -2377,7 +2385,13 @@ function calcProjectionIncome(){
       const days=[s.day,s.day2,s.day3,s.day4].filter(Boolean);
       const hasExtraToday=s.extraDates&&s.extraDates.some(ed=>ed.date===dk);
       const hasReschedule=(s.reschedules||[]).some(r=>r.date===dk);
-      if(days.includes(dayName)||hasExtraToday||hasReschedule) total+=rate;
+      if(!days.includes(dayName)&&!hasExtraToday&&!hasReschedule) return;
+      if(dk===todayDkX){
+        const att=(attendance[dk]||{})[s.name];
+        if(!att||att==='belum') total+=rate;
+      } else {
+        total+=rate;
+      }
     });
     cursor.setDate(cursor.getDate()+1);
   }
@@ -2452,7 +2466,9 @@ function setTrackStatusFilter(status){
 function buildTrackCards(){
   const now=new Date();
   let fromDate=null;
-  if(trackPeriod==='minggu'){
+  if(trackPeriod==='hari'){
+    fromDate=new Date(now.getFullYear(),now.getMonth(),now.getDate());
+  } else if(trackPeriod==='minggu'){
     const day=now.getDay();const diff=day===0?-6:1-day;
     fromDate=new Date(now);fromDate.setDate(now.getDate()+diff);fromDate.setHours(0,0,0,0);
   } else if(trackPeriod==='bulan'){
@@ -2462,10 +2478,9 @@ function buildTrackCards(){
   }
 
   const stats=students.map(s=>{
-    let hadir=0,izin=0,alpa=0,lastHadirDate=null,lastHadirKey=null;
+    let hadir=0,izin=0,alpa=0,lastHadirDate=null,lastHadirKey=null,lastActivityKey=null;
     Object.entries(attendance).forEach(([dk,dayAtt])=>{
       const d=new Date(dk+'T00:00:00');
-      if(fromDate&&d<fromDate) return;
       const dayName=DAYS[DAYS_JS.indexOf(d.getDay())];
       const hasExtra=s.extraDates&&s.extraDates.some(ed=>ed.date===dk);
       const isDay2=s.day2&&s.day2===dayName;
@@ -2473,23 +2488,19 @@ function buildTrackCards(){
       const isDay4=s.day4&&s.day4===dayName;
       const isRescheduleDate=(s.reschedules||[]).some(r=>r.date===dk);
       if(dayName!==s.day&&!hasExtra&&!isDay2&&!isDay3&&!isDay4&&!isRescheduleDate) return;
-      // Regular + reschedule session — gunakan dk+jam untuk sort yang akurat
       const st=dayAtt[s.name];
       const sortKey=dk+'T'+(s.time||'00:00');
-      if(st==='hadir'){ hadir++; if(!lastHadirKey||sortKey>lastHadirKey){lastHadirDate=dk;lastHadirKey=sortKey;} }
-      else if(st==='izin') izin++;
-      else if(st==='alpa') alpa++;
-      // Extra sessions on this date
+      // lastActivityKey SELALU dari semua waktu, tidak ikut fromDate
+      if(st&&st!=='belum'&&(!lastActivityKey||sortKey>lastActivityKey)) lastActivityKey=sortKey;
+      // Extra sessions lastActivityKey
       if(s.extraDates) s.extraDates.forEach((ed,ei)=>{
         if(ed.date!==dk) return;
         const est=dayAtt[s.name+'_extra_'+ei];
         const extraKey=dk+'T'+(ed.time||s.time||'00:00');
-        if(est==='hadir'){ hadir++; if(!lastHadirKey||extraKey>lastHadirKey){lastHadirDate=dk;lastHadirKey=extraKey;} }
-        else if(est==='izin') izin++;
-        else if(est==='alpa') alpa++;
+        if(est&&est!=='belum'&&(!lastActivityKey||extraKey>lastActivityKey)) lastActivityKey=extraKey;
       });
     });
-    return {s,hadir,izin,alpa,lastHadirDate,lastHadirKey};
+    return {s,hadir:0,izin:0,alpa:0,lastHadirDate,lastHadirKey,lastActivityKey};
   });
 
   let filtered=stats.filter(x=>x.s.name.toLowerCase().includes(trackSearch.toLowerCase()));
@@ -2500,26 +2511,54 @@ function buildTrackCards(){
   if(trackSort==='izin') filtered.sort((a,b)=>b.izin-a.izin||b.alpa-a.alpa);
   else if(trackSort==='alpa') filtered.sort((a,b)=>b.alpa-a.alpa||b.izin-a.izin);
   else if(trackSort==='hadir') filtered.sort((a,b)=>b.hadir-a.hadir);
-  else if(trackSort==='terbaru') filtered.sort((a,b)=>(b.lastHadirKey||'').localeCompare(a.lastHadirKey||''));
+  else if(trackSort==='terbaru'){
+    // Urut berdasarkan lastHadirKey (tanggal+jam aktivitas terbaru)
+    // Siswa yang ada aktivitas terbaru muncul paling atas
+    filtered.sort((a,b)=>{
+      const aKey=a.lastActivityKey||'';
+      const bKey=b.lastActivityKey||'';
+      if(bKey&&!aKey) return 1;
+      if(aKey&&!bKey) return -1;
+      return bKey.localeCompare(aKey);
+    });
+  }
   else filtered.sort((a,b)=>a.s.name.localeCompare(b.s.name));
 
   if(!filtered.length) return `<div class="empty"><div class="empty-icon">🔍</div><div class="empty-t">Tidak ditemukan</div></div>`;
 
-  const totalSess=name=>{let c=0;Object.values(attendance).forEach(d=>{if(d[name]==='hadir')c++;});return c;};
+  // Hitung total keseluruhan per siswa (tidak ikut filter periode)
+  const allTotals=name=>{
+    let h=0,i=0,a=0;
+    Object.values(attendance).forEach(d=>{
+      if(d[name]==='hadir') h++;
+      else if(d[name]==='izin') i++;
+      else if(d[name]==='alpa') a++;
+      // Extra sessions
+      Object.keys(d).forEach(k=>{
+        if(k.startsWith(name+'_extra_')){
+          if(d[k]==='hadir') h++;
+          else if(d[k]==='izin') i++;
+          else if(d[k]==='alpa') a++;
+        }
+      });
+    });
+    return {h,i,a};
+  };
 
-  return filtered.map(({s,hadir,izin,alpa})=>{
+  return filtered.map(({s})=>{
     const icon=ICONS[s.instrument]||'🎵';
     const isVokal=(s.instrument||'').toLowerCase().includes('vok');
-    const total=totalSess(s.name);
+    const {h,i,a}=allTotals(s.name);
+    const total=countSessions(s.name);
     const showPay=countSessionsForBilling(s.name)>0&&countSessionsForBilling(s.name)%(s.payCycle||4)===0;
     return `<div class="track-card" onclick="openHistoryDetail('${s.name}')">
       <div class="track-top">
         <div class="track-avatar ${isVokal?'vocal':''}">${icon}</div>
         <div><div class="track-name">${s.name}</div><div class="track-inst">${s.instrument||'—'} · ${s.day} ${s.time}${(s.reschedules&&s.reschedules.some(r=>r.date>=todayStr()))?' · 🔄 Ada Reschedule':''}</div></div>
         <div class="track-nums">
-          <div class="track-num-col"><div class="track-num h">${hadir}</div><div class="track-num-label">Hadir</div></div>
-          <div class="track-num-col"><div class="track-num i">${izin}</div><div class="track-num-label">Izin</div></div>
-          <div class="track-num-col"><div class="track-num a">${alpa}</div><div class="track-num-label">Alpa</div></div>
+          <div class="track-num-col"><div class="track-num h">${h}</div><div class="track-num-label">Hadir</div></div>
+          <div class="track-num-col"><div class="track-num i">${i}</div><div class="track-num-label">Izin</div></div>
+          <div class="track-num-col"><div class="track-num a">${a}</div><div class="track-num-label">Alpa</div></div>
         </div>
       </div>
       ${showPay?`<div class="track-notes"><span class="pay-pill">💳 ${total}x pertemuan — cek pembayaran</span></div>`:''}
