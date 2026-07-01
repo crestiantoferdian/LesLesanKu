@@ -1517,6 +1517,8 @@ function saveNote(){
     const studentName=noteStudent.name; // this is attKey
     const displayName=noteStudent.displayName||studentName;
     attendance[dateKey][studentName]=status;
+    // Simpan timestamp saat diabsen untuk sort "Terbaru"
+    localStorage.setItem('llk_ts_'+dateKey+'_'+studentName, Date.now().toString());
     const noteKey=dateKey+'_'+studentName;
     if(reason||progress) attNotes[noteKey]={reason:reason,progress:progress};
     else delete attNotes[noteKey];
@@ -1968,26 +1970,10 @@ function renderTrack(){
       <button class="track-mode-btn ${trackMode==='tanggal'?'active':''}" onclick="setTrackMode('tanggal')">📅 Kalender</button>
     </div>`;
 
-  if(trackMode==='tanggal'){
-    document.getElementById('mainContent').innerHTML=
-      `<div class="page-title-area">
-        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-          <div class="page-title" style="margin:0">Track Record</div>
-          <span style="font-size:1rem;font-weight:800;background:#f0f0f5;color:var(--text);border:1px solid var(--border);border-radius:20px;padding:3px 14px" id="trackTotalBadge">${totalHadir+totalAlpa}</span>
-        </div>
-        <div class="page-sub">Tap tanggal untuk lihat siapa hadir, izin, atau alpa.</div>
-      </div>
-      <div class="track-wrap">
-        ${modeBar}
-        ${buildCalendar()}
-        <div id="dateDetailWrap">${selectedCalDate?buildDateDetail(selectedCalDate):''}</div>
-      </div>`;
-    return;
-  }
-
-  const cards=buildTrackCards();
-  document.getElementById('mainContent').innerHTML=
-    `<div style="padding:24px 20px 0">
+  // Kartu estimasi penghasilan + kotak Hadir/Izin/Alpa — dipakai di KEDUA mode
+  // (Per Siswa maupun Kalender) supaya tidak hilang saat pindah tab.
+  const incomeBlock=`
+    <div style="padding:24px 20px 0">
       <div id="incomeCard" style="background:linear-gradient(135deg,var(--red),var(--red2));border-radius:16px;padding:16px 18px;margin-bottom:16px;color:#fff;box-shadow:0 4px 14px rgba(0,0,0,0.12)">
         <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px">
           <div style="flex:1;min-width:0">
@@ -2000,7 +1986,10 @@ function renderTrack(){
               <button id="incomeProjectionBtn" onclick="toggleIncomeProjection()" title="Proyeksi jika semua hadir sampai akhir periode" style="background:rgba(255,255,255,0.18);border:none;width:30px;height:30px;border-radius:9px;color:#fff;font-size:0.95rem;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0">🔮</button>
               <button id="incomeToggleBtn" onclick="toggleIncomeVisibility()" style="background:rgba(255,255,255,0.18);border:none;width:30px;height:30px;border-radius:9px;color:#fff;font-size:0.95rem;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0">${incomeHidden?'🙈':'👁️'}</button>
             </div>
-            <div id="trackStatSub" style="font-size:1.4rem;font-weight:800;opacity:0.95;text-align:right">${totalHadir+totalAlpa}</div>
+            <div style="text-align:right">
+              <div id="trackStatSub" style="font-size:1.4rem;font-weight:800;opacity:0.95">${totalHadir+totalAlpa}</div>
+              <div style="font-size:0.6rem;opacity:0.75;text-transform:uppercase;letter-spacing:0.04em">sesi</div>
+            </div>
           </div>
         </div>
       </div>
@@ -2018,7 +2007,28 @@ function renderTrack(){
           <div style="font-size:0.68rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.04em;margin-top:2px">Alpa</div>
         </div>
       </div>
-    </div>
+    </div>`;
+
+  if(trackMode==='tanggal'){
+    document.getElementById('mainContent').innerHTML=
+      `<div class="page-title-area">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <div class="page-title" style="margin:0">Track Record</div>
+        </div>
+        <div class="page-sub">Tap tanggal untuk lihat siapa hadir, izin, atau alpa.</div>
+      </div>
+      ${incomeBlock}
+      <div class="track-wrap">
+        ${modeBar}
+        ${buildCalendar()}
+        <div id="dateDetailWrap">${selectedCalDate?buildDateDetail(selectedCalDate):''}</div>
+      </div>`;
+    return;
+  }
+
+  const cards=buildTrackCards();
+  document.getElementById('mainContent').innerHTML=
+    `${incomeBlock}
     <div class="page-title-area" style="padding-top:0">
       <div class="page-title" style="margin:0">Track Record</div>
       <div class="page-sub">Tap nama murid untuk lihat histori lengkap.</div>
@@ -2258,11 +2268,16 @@ function updateIncomeDisplay(){
   const projIncome=incomeProjection?calcProjectionIncome():0;
   const projSessions=incomeProjection?calcProjectionSessions():0;
   const displayIncome=totalPenghasilan+projIncome;
-  const displaySessions=(totalHadir+totalAlpa)+projSessions;
+  // Angka kanan: saat proyeksi = jumlah siswa yang BELUM diabsen (akan hadir)
+  const displaySessions=incomeProjection?projSessions:(totalHadir+totalAlpa);
   const incomeAmt=document.getElementById('incomeAmount');
   if(incomeAmt) incomeAmt.textContent=incomeHidden?'••••••••':'Rp '+displayIncome.toLocaleString('id-ID');
   const sub=document.getElementById('trackStatSub');
   if(sub) sub.textContent=displaySessions;
+  // Update label di bawah angka
+  const subParent2=sub?sub.parentElement:null;
+  const sesiLabel=subParent2?subParent2.querySelector('div:last-child'):null;
+  if(sesiLabel&&sesiLabel!==sub) sesiLabel.textContent=incomeProjection?'belum':'sesi';
   const subLabel=document.getElementById('incomeProjSub');
   if(subLabel) subLabel.textContent=incomeProjection?'(aktual + proyeksi jika semua hadir)':'Hadir + Alpa × tarif per siswa';
 }
@@ -2478,7 +2493,13 @@ function buildTrackCards(){
   }
 
   const stats=students.map(s=>{
-    let hadir=0,izin=0,alpa=0,lastHadirDate=null,lastHadirKey=null,lastActivityKey=null;
+    let hadir=0,izin=0,alpa=0,lastActivityTs=0;
+    // Urutan "Terbaru" berdasarkan tanggal+jam kelas asli dari record absensi
+    // (BUKAN timestamp klik/edit — supaya tidak tercemar saat catatan lama diedit).
+    const scheduleTs=(dk, time)=>{
+      const est=new Date(dk+'T'+(time||'00:00')).getTime();
+      return isNaN(est)?0:est;
+    };
     Object.entries(attendance).forEach(([dk,dayAtt])=>{
       const d=new Date(dk+'T00:00:00');
       const dayName=DAYS[DAYS_JS.indexOf(d.getDay())];
@@ -2488,19 +2509,33 @@ function buildTrackCards(){
       const isDay4=s.day4&&s.day4===dayName;
       const isRescheduleDate=(s.reschedules||[]).some(r=>r.date===dk);
       if(dayName!==s.day&&!hasExtra&&!isDay2&&!isDay3&&!isDay4&&!isRescheduleDate) return;
+      // Jam yang sesuai jadwal hari yang cocok (hari ke-2/3/4 punya jam sendiri)
+      const scheduledTime=isDay2?(s.time2a||s.time):isDay3?(s.time3a||s.time):isDay4?(s.time4a||s.time):s.time;
       const st=dayAtt[s.name];
-      const sortKey=dk+'T'+(s.time||'00:00');
-      // lastActivityKey SELALU dari semua waktu, tidak ikut fromDate
-      if(st&&st!=='belum'&&(!lastActivityKey||sortKey>lastActivityKey)) lastActivityKey=sortKey;
-      // Extra sessions lastActivityKey
+      if(st==='hadir') hadir++;
+      else if(st==='izin') izin++;
+      else if(st==='alpa') alpa++;
+      // lastActivityTs hanya dari Hadir/Alpa (Izin bisa dicatat untuk tanggal
+      // mendatang / izin di muka, jadi tidak dipakai sebagai penanda "terbaru")
+      if(st==='hadir'||st==='alpa'){
+        const ts=scheduleTs(dk,scheduledTime);
+        if(ts>lastActivityTs) lastActivityTs=ts;
+      }
+      // Extra sessions (Tambahan Kelas)
       if(s.extraDates) s.extraDates.forEach((ed,ei)=>{
         if(ed.date!==dk) return;
-        const est=dayAtt[s.name+'_extra_'+ei];
-        const extraKey=dk+'T'+(ed.time||s.time||'00:00');
-        if(est&&est!=='belum'&&(!lastActivityKey||extraKey>lastActivityKey)) lastActivityKey=extraKey;
+        const extraAttKey=s.name+'_extra_'+ei;
+        const est=dayAtt[extraAttKey];
+        if(est==='hadir') hadir++;
+        else if(est==='izin') izin++;
+        else if(est==='alpa') alpa++;
+        if(est==='hadir'||est==='alpa'){
+          const ts=scheduleTs(dk,ed.time||s.time);
+          if(ts>lastActivityTs) lastActivityTs=ts;
+        }
       });
     });
-    return {s,hadir:0,izin:0,alpa:0,lastHadirDate,lastHadirKey,lastActivityKey};
+    return {s,hadir,izin,alpa,lastActivityTs};
   });
 
   let filtered=stats.filter(x=>x.s.name.toLowerCase().includes(trackSearch.toLowerCase()));
@@ -2512,15 +2547,9 @@ function buildTrackCards(){
   else if(trackSort==='alpa') filtered.sort((a,b)=>b.alpa-a.alpa||b.izin-a.izin);
   else if(trackSort==='hadir') filtered.sort((a,b)=>b.hadir-a.hadir);
   else if(trackSort==='terbaru'){
-    // Urut berdasarkan lastHadirKey (tanggal+jam aktivitas terbaru)
-    // Siswa yang ada aktivitas terbaru muncul paling atas
-    filtered.sort((a,b)=>{
-      const aKey=a.lastActivityKey||'';
-      const bKey=b.lastActivityKey||'';
-      if(bKey&&!aKey) return 1;
-      if(aKey&&!bKey) return -1;
-      return bKey.localeCompare(aKey);
-    });
+    // Urut berdasarkan Hadir/Alpa PALING BARU saja (Izin diabaikan karena
+    // bisa dicatat untuk tanggal mendatang / izin di muka)
+    filtered.sort((a,b)=> (b.lastActivityTs||0)-(a.lastActivityTs||0));
   }
   else filtered.sort((a,b)=>a.s.name.localeCompare(b.s.name));
 
