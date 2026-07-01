@@ -1962,8 +1962,23 @@ function renderStudentProfile(name, period){
 }
 
 
+// Helper terpusat: total sesuai mode aktif saat ini.
+// Mode Kalender -> ikut bulan yang sedang ditampilkan (calYear/calMonth).
+// Mode Per Siswa -> ikut filter periode (trackPeriod).
+function getCurrentTrackTotals(){
+  return trackMode==='tanggal'
+    ? calcTrackTotals({year:calYear,month:calMonth})
+    : calcTrackTotals();
+}
+
 function renderTrack(){
-  const {totalHadir,totalIzin,totalAlpa,totalPenghasilan}=calcTrackTotals();
+  // Saat mode Kalender aktif, kartu estimasi mengikuti bulan yang SEDANG
+  // dilihat di kalender (calYear/calMonth), bukan selalu bulan berjalan.
+  const {totalHadir,totalIzin,totalAlpa,totalPenghasilan}=getCurrentTrackTotals();
+  const MONTH_NAMES=['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+  const incomeLabel=trackMode==='tanggal'
+    ? '💰 Estimasi Penghasilan · '+MONTH_NAMES[calMonth]+' '+calYear
+    : '💰 Estimasi Penghasilan · '+trackPeriod.charAt(0).toUpperCase()+trackPeriod.slice(1);
   const modeBar=`
     <div class="track-mode-bar">
       <button class="track-mode-btn ${trackMode==='siswa'?'active':''}" onclick="setTrackMode('siswa')">👤 Per Siswa</button>
@@ -1977,7 +1992,7 @@ function renderTrack(){
       <div id="incomeCard" style="background:linear-gradient(135deg,var(--red),var(--red2));border-radius:16px;padding:16px 18px;margin-bottom:16px;color:#fff;box-shadow:0 4px 14px rgba(0,0,0,0.12)">
         <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px">
           <div style="flex:1;min-width:0">
-            <div id="incomeProjLabel" style="font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;opacity:0.85;margin-bottom:4px">💰 Estimasi Penghasilan · ${trackPeriod.charAt(0).toUpperCase()+trackPeriod.slice(1)}</div>
+            <div id="incomeProjLabel" style="font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;opacity:0.85;margin-bottom:4px">${incomeLabel}</div>
             <div id="incomeAmount" style="font-size:1.6rem;font-weight:800">${incomeHidden?'••••••••':'Rp '+totalPenghasilan.toLocaleString('id-ID')}</div>
             <div id="incomeProjSub" style="font-size:0.72rem;opacity:0.85;margin-top:2px">Hadir + Alpa × tarif per siswa</div>
           </div>
@@ -2239,7 +2254,7 @@ function buildDateDetail(dk){
 
 function refreshTrackCards(){
   document.getElementById('trackCards').innerHTML=buildTrackCards();
-  const {totalHadir,totalIzin,totalAlpa}=calcTrackTotals();
+  const {totalHadir,totalIzin,totalAlpa}=getCurrentTrackTotals();
   const badge=document.getElementById('trackTotalBadge');
   if(badge) badge.textContent=totalHadir+totalAlpa;
   const sh=document.getElementById('trackStatHadir');
@@ -2259,12 +2274,16 @@ function toggleIncomeProjection(){
     btn.title=incomeProjection?'Mode proyeksi aktif':'Mode proyeksi nonaktif';
   }
   const label=document.getElementById('incomeProjLabel');
-  if(label) label.textContent=incomeProjection?'PROYEKSI AKHIR '+trackPeriod.toUpperCase():'ESTIMASI PENGHASILAN · '+trackPeriod.charAt(0).toUpperCase()+trackPeriod.slice(1);
+  if(label){
+    const MONTH_NAMES=['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+    const periodLabel=trackMode==='tanggal'?MONTH_NAMES[calMonth]+' '+calYear:trackPeriod.charAt(0).toUpperCase()+trackPeriod.slice(1);
+    label.textContent=incomeProjection?'PROYEKSI AKHIR · '+periodLabel.toUpperCase():'ESTIMASI PENGHASILAN · '+periodLabel;
+  }
   updateIncomeDisplay();
 }
 
 function updateIncomeDisplay(){
-  const {totalHadir,totalIzin,totalAlpa,totalPenghasilan}=calcTrackTotals();
+  const {totalHadir,totalIzin,totalAlpa,totalPenghasilan}=getCurrentTrackTotals();
   const projIncome=incomeProjection?calcProjectionIncome():0;
   const projSessions=incomeProjection?calcProjectionSessions():0;
   const displayIncome=totalPenghasilan+projIncome;
@@ -2287,7 +2306,7 @@ function toggleIncomeVisibility(){
   localStorage.setItem('llk_income_hidden', incomeHidden?'1':'0');
   const btn=document.getElementById('incomeToggleBtn');
   if(btn) btn.textContent=incomeHidden?'🙈':'👁️';
-  const {totalPenghasilan}=calcTrackTotals();
+  const {totalPenghasilan}=getCurrentTrackTotals();
   const incomeAmt=document.getElementById('incomeAmount');
   if(incomeAmt) incomeAmt.textContent=incomeHidden?'••••••••':'Rp '+totalPenghasilan.toLocaleString('id-ID');
 }
@@ -2413,10 +2432,14 @@ function calcProjectionIncome(){
   return total;
 }
 
-function calcTrackTotals(){
+function calcTrackTotals(monthOverride){
   const now=new Date();
-  let fromDate=null;
-  if(trackPeriod==='hari'){
+  let fromDate=null, toDate=null;
+  if(monthOverride){
+    // Hitung total khusus untuk bulan yang sedang dilihat di Kalender
+    fromDate=new Date(monthOverride.year, monthOverride.month, 1);
+    toDate=new Date(monthOverride.year, monthOverride.month+1, 1);
+  } else if(trackPeriod==='hari'){
     fromDate=new Date(now.getFullYear(),now.getMonth(),now.getDate());
     const toD=new Date(fromDate); toD.setDate(toD.getDate()+1); 
     // toDate only used in projection, set as end of today
@@ -2435,6 +2458,7 @@ function calcTrackTotals(){
     Object.entries(attendance).forEach(([dk,dayAtt])=>{
       const d=new Date(dk+'T00:00:00');
       if(fromDate&&d<fromDate) return;
+      if(toDate&&d>=toDate) return;
       const dayName=DAYS[DAYS_JS.indexOf(d.getDay())];
       const hasExtra=s.extraDates&&s.extraDates.some(ed=>ed.date===dk);
       const isDay2=s.day2&&s.day2===dayName;
