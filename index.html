@@ -1791,7 +1791,8 @@ function renderStudentProfile(name, period){
   const now = new Date();
   const todayKey = todayStr();
   const getWeekStart = ()=>{
-    const d = new Date(now); d.setDate(d.getDate()-d.getDay()+1); return d.toISOString().slice(0,10);
+    const d = new Date(now); d.setDate(d.getDate()-d.getDay()+1);
+    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
   };
   const monthStart = now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-01';
   const yearStart  = now.getFullYear()+'-01-01';
@@ -1998,7 +1999,7 @@ function renderTrack(){
           </div>
           <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0">
             <div style="display:flex;gap:6px">
-              <button id="incomeProjectionBtn" onclick="toggleIncomeProjection()" title="Proyeksi jika semua hadir sampai akhir periode" style="background:rgba(255,255,255,0.18);border:none;width:30px;height:30px;border-radius:9px;color:#fff;font-size:0.95rem;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0">🔮</button>
+              ${trackMode==='siswa'?`<button id="incomeProjectionBtn" onclick="toggleIncomeProjection()" title="Proyeksi jika semua hadir sampai akhir periode" style="background:rgba(255,255,255,0.18);border:none;width:30px;height:30px;border-radius:9px;color:#fff;font-size:0.95rem;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0">🔮</button>`:''}
               <button id="incomeToggleBtn" onclick="toggleIncomeVisibility()" style="background:rgba(255,255,255,0.18);border:none;width:30px;height:30px;border-radius:9px;color:#fff;font-size:0.95rem;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0">${incomeHidden?'🙈':'👁️'}</button>
             </div>
             <div style="text-align:right">
@@ -2083,6 +2084,7 @@ function setTrackMode(m){
     selectedCalDate=null;
     calYear=new Date().getFullYear();
     calMonth=new Date().getMonth();
+    incomeProjection=false; // tombol proyeksi tidak ada di mode Kalender
   }
   renderTrack();
 }
@@ -2313,8 +2315,12 @@ function toggleIncomeVisibility(){
 
 function calcProjectionSessions(){
   // Hitung sesi yang BELUM terjadi di periode ini (hari > hari ini)
+  // PENTING: gunakan tanggal LOKAL (bukan toISOString/UTC), karena untuk
+  // zona waktu UTC+ (mis. WIB), toISOString() bisa mundur 1 hari saat
+  // dikonversi dari tengah malam lokal ke UTC.
+  const dateKeyOf=d=>`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
   const now=new Date(); now.setHours(0,0,0,0);
-  const todayStr=now.toISOString().slice(0,10);
+  const todayStr=dateKeyOf(now);
 
   // Tentukan periode
   let fromDate=null, toDate=null;
@@ -2323,18 +2329,17 @@ function calcProjectionSessions(){
     return 0;
   } else if(trackPeriod==='hari'){
     // Proyeksi hari ini = siswa yang BELUM diabsen × tarif
-    const todayDk=now.toISOString().slice(0,10);
+    // Pakai getStudentsForDay (sama persis dengan tab Absensi) supaya
+    // reschedule/extra/day2-4 selalu konsisten dengan yang tampil di Absensi.
+    const todayDk=todayStr;
     const todayName=DAYS[DAYS_JS.indexOf(now.getDay())];
     let sessions=0;
-    const filteredH=students.filter(s=>s.name.toLowerCase().includes(trackSearch.toLowerCase()));
-    filteredH.forEach(s=>{
-      const days=[s.day,s.day2,s.day3,s.day4].filter(Boolean);
-      const hasExtra=s.extraDates&&s.extraDates.some(ed=>ed.date===todayDk);
-      const hasReschedule=(s.reschedules||[]).some(r=>r.date===todayDk);
-      if(!days.includes(todayName)&&!hasExtra&&!hasReschedule) return;
-      const attKey=s.name;
-      const todayAtt=(attendance[todayDk]||{})[attKey];
-      if(!todayAtt||todayAtt==='belum') sessions++;
+    const dayS=getStudentsForDay(todayName,todayDk).filter(s=>!s._sameday_reschedule&&s.name.toLowerCase().includes(trackSearch.toLowerCase()));
+    dayS.forEach(s=>{
+      const attKey=s._attKey||s.name;
+      const attDateKey=s._extraDate||todayDk;
+      const status=(attendance[attDateKey]||{})[attKey];
+      if(!status||status==='belum') sessions++;
     });
     return sessions;
   } else if(trackPeriod==='minggu'){
@@ -2350,22 +2355,21 @@ function calcProjectionSessions(){
   }
 
   let projectedSessions=0;
-  const filtered=students.filter(s=>s.name.toLowerCase().includes(trackSearch.toLowerCase()));
 
-  // Loop setiap hari MULAI HARI INI sampai akhir periode
+  // Loop setiap hari MULAI HARI INI sampai akhir periode, pakai getStudentsForDay
+  // (sama persis dengan Absensi) supaya reschedule/extra selalu konsisten.
   const cursor=new Date(now);
   while(cursor<=toDate){
-    const dk=cursor.toISOString().slice(0,10);
+    const dk=dateKeyOf(cursor);
     const dayName=DAYS[DAYS_JS.indexOf(cursor.getDay())];
-    filtered.forEach(s=>{
-      const days=[s.day,s.day2,s.day3,s.day4].filter(Boolean);
-      const hasExtraToday=s.extraDates&&s.extraDates.some(ed=>ed.date===dk);
-      const hasReschedule=(s.reschedules||[]).some(r=>r.date===dk);
-      if(!days.includes(dayName)&&!hasExtraToday&&!hasReschedule) return;
+    const dayS=getStudentsForDay(dayName,dk).filter(s=>!s._sameday_reschedule&&s.name.toLowerCase().includes(trackSearch.toLowerCase()));
+    dayS.forEach(s=>{
+      const attKey=s._attKey||s.name;
+      const attDateKey=s._extraDate||dk;
       // Untuk hari ini: hanya hitung yang BELUM diabsen
       if(dk===todayStr){
-        const att=(attendance[dk]||{})[s.name];
-        if(!att||att==='belum') projectedSessions++;
+        const status=(attendance[attDateKey]||{})[attKey];
+        if(!status||status==='belum') projectedSessions++;
       } else {
         // Hari mendatang: semua dianggap akan hadir
         projectedSessions++;
@@ -2377,22 +2381,22 @@ function calcProjectionSessions(){
 }
 
 function calcProjectionIncome(){
-  const filtered=students.filter(s=>s.name.toLowerCase().includes(trackSearch.toLowerCase()));
   let total=0;
+  const dateKeyOf=d=>`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
   const n=new Date();
   let fromDate=null, toDate=null;
   if(trackPeriod==='hari'){
     // Proyeksi hari ini = siswa belum diabsen × tarif
-    const todayDk=n.toISOString().slice(0,10);
+    // Pakai getStudentsForDay (sama persis dengan tab Absensi)
+    const todayDk=dateKeyOf(n);
     const todayName=DAYS[DAYS_JS.indexOf(n.getDay())];
-    filtered.forEach(s=>{
+    const dayS=getStudentsForDay(todayName,todayDk).filter(s=>!s._sameday_reschedule&&s.name.toLowerCase().includes(trackSearch.toLowerCase()));
+    dayS.forEach(s=>{
       const rate=s.rate||40000;
-      const days=[s.day,s.day2,s.day3,s.day4].filter(Boolean);
-      const hasExtra=s.extraDates&&s.extraDates.some(ed=>ed.date===todayDk);
-      const hasReschedule=(s.reschedules||[]).some(r=>r.date===todayDk);
-      if(!days.includes(todayName)&&!hasExtra&&!hasReschedule) return;
-      const todayAtt=(attendance[todayDk]||{})[s.name];
-      if(!todayAtt||todayAtt==='belum') total+=rate;
+      const attKey=s._attKey||s.name;
+      const attDateKey=s._extraDate||todayDk;
+      const status=(attendance[attDateKey]||{})[attKey];
+      if(!status||status==='belum') total+=rate;
     });
     return total;
   } else if(trackPeriod==='minggu'){
@@ -2409,20 +2413,19 @@ function calcProjectionIncome(){
 
   if(!fromDate||!toDate) return 0;
   const now=new Date(); now.setHours(0,0,0,0);
-  const todayDkX=now.toISOString().slice(0,10);
+  const todayDkX=dateKeyOf(now);
   const cursor=new Date(now);
   while(cursor<=toDate){
-    const dk=cursor.toISOString().slice(0,10);
+    const dk=dateKeyOf(cursor);
     const dayName=DAYS[DAYS_JS.indexOf(cursor.getDay())];
-    filtered.forEach(s=>{
+    const dayS=getStudentsForDay(dayName,dk).filter(s=>!s._sameday_reschedule&&s.name.toLowerCase().includes(trackSearch.toLowerCase()));
+    dayS.forEach(s=>{
       const rate=s.rate||40000;
-      const days=[s.day,s.day2,s.day3,s.day4].filter(Boolean);
-      const hasExtraToday=s.extraDates&&s.extraDates.some(ed=>ed.date===dk);
-      const hasReschedule=(s.reschedules||[]).some(r=>r.date===dk);
-      if(!days.includes(dayName)&&!hasExtraToday&&!hasReschedule) return;
+      const attKey=s._attKey||s.name;
+      const attDateKey=s._extraDate||dk;
       if(dk===todayDkX){
-        const att=(attendance[dk]||{})[s.name];
-        if(!att||att==='belum') total+=rate;
+        const status=(attendance[attDateKey]||{})[attKey];
+        if(!status||status==='belum') total+=rate;
       } else {
         total+=rate;
       }
@@ -2441,15 +2444,17 @@ function calcTrackTotals(monthOverride){
     toDate=new Date(monthOverride.year, monthOverride.month+1, 1);
   } else if(trackPeriod==='hari'){
     fromDate=new Date(now.getFullYear(),now.getMonth(),now.getDate());
-    const toD=new Date(fromDate); toD.setDate(toD.getDate()+1); 
-    // toDate only used in projection, set as end of today
+    toDate=new Date(fromDate); toDate.setDate(toDate.getDate()+1);
   } else if(trackPeriod==='minggu'){
     const day=now.getDay();const diff=day===0?-6:1-day;
     fromDate=new Date(now);fromDate.setDate(now.getDate()+diff);fromDate.setHours(0,0,0,0);
+    toDate=new Date(fromDate); toDate.setDate(toDate.getDate()+7);
   } else if(trackPeriod==='bulan'){
     fromDate=new Date(now.getFullYear(),now.getMonth(),1);
+    toDate=new Date(now.getFullYear(),now.getMonth()+1,1);
   } else if(trackPeriod==='tahun'){
     fromDate=new Date(now.getFullYear(),0,1);
+    toDate=new Date(now.getFullYear()+1,0,1);
   }
   let totalHadir=0,totalIzin=0,totalAlpa=0,totalPenghasilan=0;
   const filtered=students.filter(s=>s.name.toLowerCase().includes(trackSearch.toLowerCase()));
