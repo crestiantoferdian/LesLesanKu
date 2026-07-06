@@ -669,10 +669,15 @@ body{
     <div class="modal-handle"></div>
     <div class="modal-title" id="linkModalTitle">🔗 Tambah Tautan</div>
     <div class="mfield">
-      <label>Nama Tombol</label>
+      <label id="linkNameLabel">Nama Tombol</label>
       <input type="text" id="f_link_name" placeholder="cth: Grup WA Ortu, Absen Google Form, dll" maxlength="40"/>
     </div>
     <div class="mfield">
+      <label>Ikon</label>
+      <div id="linkIconPicker" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px"></div>
+      <input type="text" id="f_link_icon_custom" placeholder="Atau ketik/tempel ikon sendiri di sini (pakai keyboard emoji HP)" maxlength="8" oninput="pickLinkIcon(this.value||'📁',true)"/>
+    </div>
+    <div class="mfield" id="linkUrlField">
       <label>Link Tujuan</label>
       <input type="url" id="f_link_url" placeholder="https://..."/>
     </div>
@@ -680,7 +685,7 @@ body{
       <button class="mbtn mbtn-cancel" onclick="closeLinkModal()">Batal</button>
       <button class="mbtn mbtn-save" onclick="saveQuickLink()">💾 Simpan</button>
     </div>
-    <button id="linkDelBtn" onclick="deleteQuickLink()" style="display:none;width:100%;margin-top:10px;padding:10px;background:#fff5f5;border:1.5px solid rgba(220,38,38,0.25);color:var(--alpa);border-radius:10px;font-family:sans-serif;font-weight:700;font-size:0.85rem;cursor:pointer">🗑 Hapus Tautan Ini</button>
+    <button id="linkDelBtn" onclick="deleteQuickLink()" style="display:none;width:100%;margin-top:10px;padding:10px;background:#fff5f5;border:1.5px solid rgba(220,38,38,0.25);color:var(--alpa);border-radius:10px;font-family:sans-serif;font-weight:700;font-size:0.85rem;cursor:pointer">🗑 Hapus</button>
   </div>
 </div>
 
@@ -974,6 +979,14 @@ window.addEventListener('popstate',function(e){
     history.pushState({tab:'track',view:'main'},''); return;
   }
 
+  // 2c. Kembali dari sub-folder Link
+  if(viewingLinkFolder){
+    viewingLinkFolder=null;
+    currentTab='links';
+    renderLinks();
+    history.pushState({tab:'links',view:'main'},''); return;
+  }
+
   // 2b. Kembali dari profil siswa
   if(window._profileName){
     const backTo = state.profileFrom || state.tab || window._profileFrom || 'siswa';
@@ -1034,6 +1047,7 @@ function toggleSItem(el){
 function setTab(t){
   currentTab=t;
   if(t!=='track') viewingStudent=null;
+  if(t!=='links') viewingLinkFolder=null;
   history.pushState({tab:t, view:'main'},'');
   ['absensi','siswa','track','kirim','links','lainnya'].forEach(x=>document.getElementById('tab-'+x).classList.toggle('active',x===t));
   render();
@@ -2831,12 +2845,83 @@ function fallbackKirimCopy(txt){
 }
 
 
-// ── TAB LINK (tombol tautan kustom) ──────────────────
+// ── TAB LINK (folder + tombol tautan kustom) ─────────
+let viewingLinkFolder=null; // id folder yang sedang dibuka, null = daftar utama
+const LINK_ICON_CHOICES=['📁','🔗','🎹','🎸','🎻','🥁','🎤','🎵','📚','📝','🎬','📷','💰','🌐','⭐','📌'];
+let selectedLinkIcon='📁';
+
+function renderIconPicker(skipCustomInputSync){
+  const wrap=document.getElementById('linkIconPicker');
+  wrap.innerHTML=LINK_ICON_CHOICES.map(ic=>`
+    <button type="button" onclick="pickLinkIcon('${ic}')" style="width:42px;height:42px;border-radius:10px;border:2px solid ${selectedLinkIcon===ic?'var(--red)':'var(--border)'};background:${selectedLinkIcon===ic?'#fef2f2':'var(--card)'};font-size:1.3rem;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.12s">${ic}</button>
+  `).join('');
+  if(!skipCustomInputSync){
+    const customInput=document.getElementById('f_link_icon_custom');
+    if(customInput) customInput.value=selectedLinkIcon;
+  }
+}
+function pickLinkIcon(ic, fromCustomInput){
+  selectedLinkIcon=ic||'📁';
+  renderIconPicker(fromCustomInput);
+}
+
 function renderLinks(){
-  const items=quickLinks.map((l,i)=>`
+  if(viewingLinkFolder){ renderLinkFolderView(viewingLinkFolder); return; }
+
+  const folders=quickLinks.filter(l=>l.type==='folder');
+  const topLinks=quickLinks.filter(l=>l.type!=='folder'&&!l.folderId);
+
+  const folderItems=folders.map(f=>{
+    const count=quickLinks.filter(l=>l.type!=='folder'&&l.folderId===f.id).length;
+    return `
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px 16px;margin-bottom:10px;display:flex;align-items:center;gap:12px;box-shadow:var(--shadow-xs)">
+      <button onclick="openLinkFolder('${f.id}')" style="flex:1;min-width:0;display:flex;align-items:center;gap:10px;background:none;border:none;text-align:left;cursor:pointer;padding:0">
+        <span style="font-size:1.3rem;flex-shrink:0">${f.icon||'📁'}</span>
+        <span style="min-width:0">
+          <div style="font-weight:700;font-size:0.95rem;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(f.name)}</div>
+          <div style="font-size:0.72rem;color:var(--muted)">${count} tautan</div>
+        </span>
+      </button>
+      <span style="color:var(--muted2);font-size:1rem;flex-shrink:0">›</span>
+    </div>`;
+  }).join('');
+
+  const linkItems=topLinks.map(l=>`
     <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px 16px;margin-bottom:10px;display:flex;align-items:center;gap:12px;box-shadow:var(--shadow-xs)">
       <button onclick="openQuickLink('${l.id}')" style="flex:1;min-width:0;display:flex;align-items:center;gap:10px;background:none;border:none;text-align:left;cursor:pointer;padding:0">
-        <span style="font-size:1.3rem;flex-shrink:0">🔗</span>
+        <span style="font-size:1.3rem;flex-shrink:0">${l.icon||'🔗'}</span>
+        <span style="min-width:0">
+          <div style="font-weight:700;font-size:0.95rem;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(l.name)}</div>
+        </span>
+      </button>
+      <button onclick="openEditLinkModal('${l.id}')" style="flex-shrink:0;width:36px;height:36px;border-radius:10px;border:1px solid var(--border);background:var(--card);font-size:1rem;cursor:pointer;display:flex;align-items:center;justify-content:center">✏️</button>
+    </div>`).join('');
+
+  const isEmpty=folders.length===0&&topLinks.length===0;
+
+  document.getElementById('mainContent').innerHTML=
+    `<div class="page-title-area">
+      <div class="page-title" style="margin:0">Link</div>
+      <div class="page-sub">Tombol pintasan ke link apa pun — tap untuk langsung dibuka.</div>
+    </div>
+    <div style="padding:0 20px 24px">
+      <div style="display:flex;gap:10px;margin-bottom:16px">
+        <button onclick="openAddFolderModal()" style="flex:1;padding:14px;background:var(--card);color:var(--text);border:1.5px solid var(--border);border-radius:14px;font-family:sans-serif;font-weight:700;font-size:0.85rem;cursor:pointer">📁 Folder Baru</button>
+        <button onclick="openAddLinkModal(null)" style="flex:1;padding:14px;background:var(--red);color:#fff;border:none;border-radius:14px;font-family:sans-serif;font-weight:700;font-size:0.85rem;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,0.12)">+ Tambah Tautan</button>
+      </div>
+      ${isEmpty?`<div class="empty"><div class="empty-icon">🔗</div><div class="empty-t">Belum ada tautan</div><div class="empty-d">Buat folder untuk mengelompokkan tautan, atau tambah tautan langsung.</div></div>`:folderItems+linkItems}
+    </div>`;
+}
+
+function renderLinkFolderView(folderId){
+  const folder=quickLinks.find(l=>l.id===folderId&&l.type==='folder');
+  if(!folder){ viewingLinkFolder=null; renderLinks(); return; }
+  const links=quickLinks.filter(l=>l.type!=='folder'&&l.folderId===folderId);
+
+  const linkItems=links.map(l=>`
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px 16px;margin-bottom:10px;display:flex;align-items:center;gap:12px;box-shadow:var(--shadow-xs)">
+      <button onclick="openQuickLink('${l.id}')" style="flex:1;min-width:0;display:flex;align-items:center;gap:10px;background:none;border:none;text-align:left;cursor:pointer;padding:0">
+        <span style="font-size:1.3rem;flex-shrink:0">${l.icon||'🔗'}</span>
         <span style="min-width:0">
           <div style="font-weight:700;font-size:0.95rem;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(l.name)}</div>
         </span>
@@ -2845,24 +2930,47 @@ function renderLinks(){
     </div>`).join('');
 
   document.getElementById('mainContent').innerHTML=
-    `<div class="page-title-area">
-      <div class="page-title" style="margin:0">Link</div>
-      <div class="page-sub">Tombol pintasan ke link apa pun — tap untuk langsung dibuka.</div>
+    `<div class="page-title-area hist-back" style="position:relative">
+      <button onclick="closeLinkFolder()" style="position:absolute;top:10px;left:20px;width:40px;height:40px;border-radius:12px;border:1.5px solid var(--border);background:var(--card);font-size:1.2rem;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:var(--shadow-xs)">←</button>
+      <button onclick="openEditFolderModal('${folder.id}')" style="position:absolute;top:10px;right:20px;width:40px;height:40px;border-radius:12px;border:1.5px solid var(--border);background:var(--card);font-size:1.1rem;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:var(--shadow-xs)">✏️</button>
+      <div class="page-title" style="margin:0;text-align:center">${folder.icon||'📁'} ${escapeHtml(folder.name)}</div>
+      <div class="page-sub" style="text-align:center">${links.length} tautan di folder ini</div>
     </div>
     <div style="padding:0 20px 24px">
-      <button onclick="openAddLinkModal()" style="width:100%;padding:14px;background:var(--red);color:#fff;border:none;border-radius:14px;font-family:sans-serif;font-weight:700;font-size:0.9rem;cursor:pointer;margin-bottom:16px;box-shadow:0 4px 14px rgba(0,0,0,0.12)">+ Tambah Tautan</button>
-      ${quickLinks.length?items:`<div class="empty"><div class="empty-icon">🔗</div><div class="empty-t">Belum ada tautan</div><div class="empty-d">Tap "+ Tambah Tautan" untuk membuat tombol pertamamu.</div></div>`}
+      <button onclick="openAddLinkModal('${folder.id}')" style="width:100%;padding:14px;background:var(--red);color:#fff;border:none;border-radius:14px;font-family:sans-serif;font-weight:700;font-size:0.9rem;cursor:pointer;margin-bottom:16px;box-shadow:0 4px 14px rgba(0,0,0,0.12)">+ Tambah Tautan di Folder Ini</button>
+      ${links.length?linkItems:`<div class="empty"><div class="empty-icon">🔗</div><div class="empty-t">Folder ini masih kosong</div><div class="empty-d">Tap "+ Tambah Tautan" untuk mengisi folder ${escapeHtml(folder.name)}.</div></div>`}
     </div>`;
 }
 
-let editingLinkId=null;
+function openLinkFolder(id){
+  viewingLinkFolder=id;
+  history.pushState({tab:'links', view:'sub', folder:id},'');
+  renderLinks();
+}
 
-function openAddLinkModal(){
+function closeLinkFolder(){
+  viewingLinkFolder=null;
+  history.pushState({tab:'links', view:'main'},'');
+  renderLinks();
+}
+
+let editingLinkId=null;
+let linkModalMode='link'; // 'link' | 'folder'
+let pendingLinkFolderId=null; // folder tujuan saat menambah link baru
+
+function openAddLinkModal(folderId){
   editingLinkId=null;
+  linkModalMode='link';
+  pendingLinkFolderId=folderId||null;
   document.getElementById('linkModalTitle').textContent='🔗 Tambah Tautan';
+  document.getElementById('linkNameLabel').textContent='Nama Tombol';
   document.getElementById('f_link_name').value='';
+  document.getElementById('f_link_name').placeholder='cth: Grup WA Ortu, Absen Google Form, dll';
   document.getElementById('f_link_url').value='';
+  document.getElementById('linkUrlField').style.display='flex';
   document.getElementById('linkDelBtn').style.display='none';
+  selectedLinkIcon='🔗';
+  renderIconPicker();
   history.pushState({tab:currentTab, view:'modal'},'');
   document.getElementById('linkOverlay').classList.add('open');
 }
@@ -2871,10 +2979,46 @@ function openEditLinkModal(id){
   const l=quickLinks.find(x=>x.id===id);
   if(!l) return;
   editingLinkId=id;
+  linkModalMode='link';
   document.getElementById('linkModalTitle').textContent='✏️ Edit Tautan';
+  document.getElementById('linkNameLabel').textContent='Nama Tombol';
   document.getElementById('f_link_name').value=l.name;
   document.getElementById('f_link_url').value=l.url;
+  document.getElementById('linkUrlField').style.display='flex';
   document.getElementById('linkDelBtn').style.display='block';
+  selectedLinkIcon=l.icon||'🔗';
+  renderIconPicker();
+  history.pushState({tab:currentTab, view:'modal'},'');
+  document.getElementById('linkOverlay').classList.add('open');
+}
+
+function openAddFolderModal(){
+  editingLinkId=null;
+  linkModalMode='folder';
+  document.getElementById('linkModalTitle').textContent='📁 Folder Baru';
+  document.getElementById('linkNameLabel').textContent='Nama Folder';
+  document.getElementById('f_link_name').value='';
+  document.getElementById('f_link_name').placeholder='cth: Piano, Gitar, Vokal';
+  document.getElementById('linkUrlField').style.display='none';
+  document.getElementById('linkDelBtn').style.display='none';
+  selectedLinkIcon='📁';
+  renderIconPicker();
+  history.pushState({tab:currentTab, view:'modal'},'');
+  document.getElementById('linkOverlay').classList.add('open');
+}
+
+function openEditFolderModal(id){
+  const f=quickLinks.find(x=>x.id===id&&x.type==='folder');
+  if(!f) return;
+  editingLinkId=id;
+  linkModalMode='folder';
+  document.getElementById('linkModalTitle').textContent='✏️ Edit Folder';
+  document.getElementById('linkNameLabel').textContent='Nama Folder';
+  document.getElementById('f_link_name').value=f.name;
+  document.getElementById('linkUrlField').style.display='none';
+  document.getElementById('linkDelBtn').style.display='block';
+  selectedLinkIcon=f.icon||'📁';
+  renderIconPicker();
   history.pushState({tab:currentTab, view:'modal'},'');
   document.getElementById('linkOverlay').classList.add('open');
 }
@@ -2885,16 +3029,30 @@ function closeLinkModal(){
 
 function saveQuickLink(){
   const name=document.getElementById('f_link_name').value.trim();
+  if(!name){ toast(linkModalMode==='folder'?'Nama folder wajib diisi':'Nama tombol wajib diisi'); return; }
+
+  if(linkModalMode==='folder'){
+    if(editingLinkId){
+      const f=quickLinks.find(x=>x.id===editingLinkId);
+      if(f){ f.name=name; f.icon=selectedLinkIcon; }
+    } else {
+      quickLinks.push({id:'folder_'+Date.now(), type:'folder', name, icon:selectedLinkIcon});
+    }
+    save();
+    closeLinkModal();
+    renderLinks();
+    toast('✅ Folder disimpan');
+    return;
+  }
+
   let url=document.getElementById('f_link_url').value.trim();
-  if(!name){ toast('Nama tombol wajib diisi'); return; }
   if(!url){ toast('Link tujuan wajib diisi'); return; }
-  // Tambahkan https:// otomatis kalau user lupa menulis skema
   if(!/^https?:\/\//i.test(url)) url='https://'+url;
   if(editingLinkId){
     const l=quickLinks.find(x=>x.id===editingLinkId);
-    if(l){ l.name=name; l.url=url; }
+    if(l){ l.name=name; l.url=url; l.icon=selectedLinkIcon; }
   } else {
-    quickLinks.push({id:'link_'+Date.now(), name, url});
+    quickLinks.push({id:'link_'+Date.now(), type:'link', name, url, icon:selectedLinkIcon, folderId:pendingLinkFolderId});
   }
   save();
   closeLinkModal();
@@ -2904,11 +3062,17 @@ function saveQuickLink(){
 
 function deleteQuickLink(){
   if(!editingLinkId) return;
-  quickLinks=quickLinks.filter(x=>x.id!==editingLinkId);
+  if(linkModalMode==='folder'){
+    // Hapus folder beserta semua tautan di dalamnya
+    quickLinks=quickLinks.filter(x=>x.id!==editingLinkId&&x.folderId!==editingLinkId);
+    viewingLinkFolder=null;
+  } else {
+    quickLinks=quickLinks.filter(x=>x.id!==editingLinkId);
+  }
   save();
   closeLinkModal();
   renderLinks();
-  toast('🗑 Tautan dihapus');
+  toast('🗑 Terhapus');
 }
 
 function openQuickLink(id){
