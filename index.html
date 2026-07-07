@@ -628,9 +628,11 @@ body{
     </div>
     <div class="mactions">
       <button class="mbtn mbtn-cancel" onclick="closeModal()">Batal</button>
-      <button class="mbtn mbtn-del" id="delBtn" onclick="doDelete()" style="display:none">🗑 Hapus</button>
+      <button class="mbtn mbtn-del" id="inactiveToggleBtn" onclick="toggleInactiveFromModal()" style="display:none"></button>
       <button class="mbtn mbtn-save" onclick="doSave()">💾 Simpan</button>
     </div>
+    <div id="inactiveHint" style="display:none;font-size:0.72rem;color:var(--muted);text-align:center;margin-top:6px;line-height:1.4">Nonaktifkan kalau siswa berhenti sementara/permanen — riwayat absensi & pembayaran tetap tersimpan aman. Hapus permanen akan menghilangkan semua riwayatnya.</div>
+    <button id="delBtn" onclick="doDelete()" style="display:none;width:100%;margin-top:10px;padding:10px;background:#fff5f5;border:1.5px solid rgba(220,38,38,0.25);color:var(--alpa);border-radius:10px;font-family:sans-serif;font-weight:700;font-size:0.85rem;cursor:pointer">🗑 Hapus</button>
   </div>
 </div>
 
@@ -1279,10 +1281,11 @@ let extraDates = []; // array of {date, time, time2} for current edit
 let adminWaNumber = localStorage.getItem('rms4_admin_wa')||'';
 
 // Helper: get students scheduled for a day (including reschedule + tambahan)
-function getStudentsForDay(dayName, dateKey){
+function getStudentsForDay(dayName, dateKey, includeInactive){
   const result=[];
 
   students.forEach(s=>{
+    if(s.inactive&&!includeInactive) return; // siswa nonaktif tidak muncul di jadwal Absensi baru, tapi tetap muncul di riwayat
     const originalIdx=students.indexOf(s);
 
     // Reschedule berbasis array per hari
@@ -1675,10 +1678,26 @@ function confirmMarkPaid(btn, studentName){
 function siswaCardHtml(s,total,cycle,isDue){
     const icon=ICONS[s.instrument]||'🎵';
     const isVokal=(s.instrument||'').toLowerCase().includes('vok');
+    const safeName=s.name.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+
+    if(s.inactive){
+      let ih='<div style="background:#f7f7f8;border:1px solid var(--border);border-radius:14px;padding:14px;margin-bottom:8px;opacity:0.75">';
+      ih+='<div style="display:flex;align-items:center;gap:10px;cursor:pointer" onclick="openStudentReport(\''+safeName+'\')">';
+      ih+='<div class="track-avatar'+(isVokal?' vocal':'')+'" style="width:42px;height:42px;font-size:1.2rem;filter:grayscale(1)">'+icon+'</div>';
+      ih+='<div style="flex:1;min-width:0">';
+      ih+='<div style="font-weight:800;font-size:0.95rem;color:var(--muted)">'+s.name+' <span style="font-size:0.65rem;font-weight:700;background:#e5e5ea;color:var(--muted);border-radius:20px;padding:2px 8px;vertical-align:middle">NONAKTIF</span></div>';
+      ih+='<div style="font-size:0.75rem;color:var(--muted);margin-top:1px">'+s.day+' '+s.time+(s.instrument?' · '+s.instrument:'')+'</div>';
+      ih+='</div>';
+      ih+='<span style="color:var(--muted)">›</span>';
+      ih+='</div>';
+      ih+='<div style="margin-top:10px"><button onclick="event.stopPropagation();reactivateStudent(\''+safeName+'\')" style="width:100%;padding:10px;background:#fff;color:var(--hadir);border:1.5px solid rgba(45,138,94,0.4);border-radius:10px;font-family:sans-serif;font-size:0.8rem;font-weight:700;cursor:pointer">▶️ Aktifkan Kembali</button></div>';
+      ih+='</div>';
+      return ih;
+    }
+
     const sessInCycle=total%cycle;
     const remaining=isDue?0:cycle-sessInCycle;
     const adminWa=(s.adminWa||adminWaNumber||'').replace(/\D/g,'').replace(/^0/,'');
-    const safeName=s.name.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
     const waText='Halo Admin\nMohon diingatkan pembayaran:\nNama: '+s.name+'\nInstrumen: '+(s.instrument||'-')+'\nJadwal: '+s.day+' '+s.time+(s.time2?'-'+s.time2:'')+(s.day2?' & '+s.day2+' '+s.time2b+(s.time2c?'-'+s.time2c:''):'')+'\nTotal: '+total+'x (siklus '+cycle+'x)\nTerima kasih!';
     const waLink=adminWa?'https://wa.me/62'+adminWa+'?text='+encodeURIComponent(waText):'';
 
@@ -1722,8 +1741,11 @@ function renderSiswa(){
     return matchName&&matchInst;
   }).sort((a,b)=>a.name.localeCompare(b.name));
 
+  const activeFiltered=filtered.filter(s=>!s.inactive);
+  const inactiveList=filtered.filter(s=>s.inactive);
+
   const needPay=[], ok=[];
-  filtered.forEach(s=>{
+  activeFiltered.forEach(s=>{
     const total=countSessionsForBilling(s.name);
     const cycle=s.payCycle||4;
     const isDue=total>0&&total%cycle===0;
@@ -1731,6 +1753,7 @@ function renderSiswa(){
   });
 
   const totalNeedPay=students.filter(s=>{
+    if(s.inactive) return false;
     const t=countSessionsForBilling(s.name);
     return t>0&&t%(s.payCycle||4)===0;
   }).length;
@@ -1743,7 +1766,7 @@ function renderSiswa(){
 
   let html='<div class="page-title-area">';
   html+='<div class="page-title">Siswa</div>';
-  html+='<div class="page-sub">'+students.length+' siswa terdaftar · '+totalNeedPay+' perlu bayar</div>';
+  html+='<div class="page-sub">'+activeFiltered.length+' siswa aktif'+(inactiveList.length?' · '+inactiveList.length+' nonaktif':'')+' · '+totalNeedPay+' perlu bayar</div>';
   html+='</div>';
   html+='<div style="padding:0 16px">';
   html+='<div style="background:var(--card);border:1.5px solid var(--border);border-radius:12px;padding:10px 14px;display:flex;align-items:center;gap:8px;margin-bottom:8px">';
@@ -1755,7 +1778,7 @@ function renderSiswa(){
   html+='</div>';
 
   html+='<div id="siswaListWrap">';
-  html+=buildSiswaListHtml(needPay,ok,filtered);
+  html+=buildSiswaListHtml(needPay,ok,filtered,inactiveList);
   html+='</div>';
   html+='</div>';
   document.getElementById('mainContent').innerHTML=html;
@@ -1767,7 +1790,8 @@ function renderSiswa(){
   }
 }
 
-function buildSiswaListHtml(needPay,ok,filtered){
+function buildSiswaListHtml(needPay,ok,filtered,inactiveList){
+  inactiveList=inactiveList||[];
   let html='';
   if(!filtered||!filtered.length){
     html+='<div class="empty"><div class="empty-icon">🔍</div><div class="empty-t">Tidak ditemukan</div><div class="empty-d">Coba kata kunci lain</div></div>';
@@ -1780,8 +1804,23 @@ function buildSiswaListHtml(needPay,ok,filtered){
       html+='<div style="font-size:0.72rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em;padding:4px 0 8px;margin-top:'+(needPay.length?'12':'0')+'px">Semua Siswa ('+ok.length+')</div>';
       ok.forEach(({s,total,cycle,isDue})=>{ html+=siswaCardHtml(s,total,cycle,isDue); });
     }
+    if(inactiveList.length){
+      const shown=!!window.showInactiveSiswa;
+      html+='<div onclick="toggleShowInactiveSiswa()" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;padding:10px 0 8px;margin-top:16px;border-top:1px solid var(--border)">';
+      html+='<span style="font-size:0.72rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em">⏸️ Nonaktif ('+inactiveList.length+')</span>';
+      html+='<span style="font-size:0.75rem;color:var(--muted)">'+(shown?'Sembunyikan ▲':'Tampilkan ▼')+'</span>';
+      html+='</div>';
+      if(shown){
+        inactiveList.forEach(s=>{ html+=siswaCardHtml(s,0,4,false); });
+      }
+    }
   }
   return html;
+}
+
+function toggleShowInactiveSiswa(){
+  window.showInactiveSiswa=!window.showInactiveSiswa;
+  renderSiswaList();
 }
 
 // Render hanya list tanpa rebuild seluruh halaman (agar keyboard tidak tutup)
@@ -1797,15 +1836,18 @@ function renderSiswaList(){
     return matchName&&matchInst;
   }).sort((a,b)=>a.name.localeCompare(b.name));
 
+  const activeFiltered=filtered.filter(s=>!s.inactive);
+  const inactiveList=filtered.filter(s=>s.inactive);
+
   const needPay=[], ok=[];
-  filtered.forEach(s=>{
+  activeFiltered.forEach(s=>{
     const total=countSessionsForBilling(s.name);
     const cycle=s.payCycle||4;
     const isDue=total>0&&total%cycle===0;
     (isDue?needPay:ok).push({s,total,cycle,isDue});
   });
 
-  wrap.innerHTML=buildSiswaListHtml(needPay,ok,filtered);
+  wrap.innerHTML=buildSiswaListHtml(needPay,ok,filtered,inactiveList);
   // Jaga fokus keyboard tetap di input
   const inp=document.getElementById('siswaSearchInput');
   if(inp&&document.activeElement!==inp){
@@ -2186,8 +2228,10 @@ function buildDateDetail(dk){
   const d=new Date(dk+'T00:00:00');
   const dayName=DAYS[DAYS_JS.indexOf(d.getDay())];
 
-  // Ambil semua murid terjadwal di tanggal ini
-  const scheduled=getStudentsForDay(dayName, dk).sort((a,b)=>a.time.localeCompare(b.time));
+  // Siswa nonaktif HANYA disertakan untuk tanggal SEBELUM hari ini (riwayat murni).
+  // Hari ini & tanggal mendatang tetap dianggap "jadwal ke depan" — nonaktif hilang.
+  const isPast=dk<todayStr();
+  const scheduled=getStudentsForDay(dayName, dk, isPast).sort((a,b)=>a.time.localeCompare(b.time));
 
   if(!scheduled.length){
     return `<div class="date-detail">
@@ -2657,7 +2701,7 @@ function buildTrackCards(){
     return `<div class="track-card" onclick="openHistoryDetail('${s.name}')">
       <div class="track-top">
         <div class="track-avatar ${isVokal?'vocal':''}">${icon}</div>
-        <div><div class="track-name">${s.name}</div><div class="track-inst">${s.instrument||'—'} · ${s.day} ${s.time}${(s.reschedules&&s.reschedules.some(r=>r.date>=todayStr()))?' · 🔄 Ada Reschedule':''}</div></div>
+        <div><div class="track-name">${s.name}${s.inactive?' <span style="font-size:0.65rem;font-weight:700;background:#f0f0f0;color:var(--muted);border-radius:20px;padding:2px 8px;vertical-align:middle">NONAKTIF</span>':''}</div><div class="track-inst">${s.instrument||'—'} · ${s.day} ${s.time}${(s.reschedules&&s.reschedules.some(r=>r.date>=todayStr()))?' · 🔄 Ada Reschedule':''}</div></div>
         <div class="track-nums">
           <div class="track-num-col"><div class="track-num h">${h}</div><div class="track-num-label">Hadir</div></div>
           <div class="track-num-col"><div class="track-num i">${i}</div><div class="track-num-label">Izin</div></div>
@@ -3471,6 +3515,8 @@ function openAdd(){
   document.getElementById('modalTitle').textContent='＋ Tambah Murid';
   document.getElementById('modalSub').style.display='none';
   document.getElementById('delBtn').style.display='none';
+  document.getElementById('inactiveToggleBtn').style.display='none';
+  document.getElementById('inactiveHint').style.display='none';
   ['f_name','f_inst','f_notes','f_phone','f_extra_note','f_initial_sessions','f_sheet_link','f_day2','f_time2a','f_time2b','f_day3','f_time3a','f_time3b','f_day4','f_time4a','f_time4b','f_rate'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   document.getElementById('f_pay_cycle').value='4';
   document.getElementById('f_admin_wa').value=adminWaNumber;
@@ -3490,7 +3536,15 @@ function openEdit(idx){
   document.getElementById('modalTitle').textContent='✏️ Edit Murid';
   document.getElementById('modalSub').style.display='block';
   document.getElementById('modalSub').textContent=`${countSessions(s.name)}x pertemuan total`;
-  document.getElementById('delBtn').style.display='flex';
+  document.getElementById('delBtn').style.display='block';
+  const inactiveBtn=document.getElementById('inactiveToggleBtn');
+  inactiveBtn.dataset.confirm='';
+  inactiveBtn.style.display='flex';
+  inactiveBtn.textContent=s.inactive?'▶️ Aktifkan Kembali':'⏸️ Nonaktifkan';
+  inactiveBtn.style.background=s.inactive?'#eafaf1':'#fff9f0';
+  inactiveBtn.style.setProperty('border',s.inactive?'1.5px solid rgba(45,138,94,0.3)':'1.5px solid rgba(217,119,6,0.3)','important');
+  inactiveBtn.style.color=s.inactive?'var(--hadir)':'#b45309';
+  document.getElementById('inactiveHint').style.display='block';
   document.getElementById('f_name').value=s.name;
   document.getElementById('f_inst').value=s.instrument||'';
   document.getElementById('f_day').value=s.day;
@@ -3524,7 +3578,11 @@ function openEdit(idx){
   document.getElementById('overlay').classList.add('open');
 }
 
-function closeModal(){document.getElementById('overlay').classList.remove('open')}
+function closeModal(){
+  document.getElementById('overlay').classList.remove('open');
+  const inactiveBtn=document.getElementById('inactiveToggleBtn');
+  if(inactiveBtn) inactiveBtn.dataset.confirm='';
+}
 
 // Extra dates management
 function addExtraDate(){
@@ -3609,10 +3667,64 @@ function doSave(){
   if(editIdx!==null){
     // Preserve lastPaidAt agar siklus bayar tidak hilang saat edit
     if(students[editIdx].lastPaidAt) s.lastPaidAt=students[editIdx].lastPaidAt;
+    // Preserve status nonaktif agar tidak ke-reset saat form disimpan
+    if(students[editIdx].inactive) s.inactive=true;
     students[editIdx]=s;
   } else students.push(s);
   save();closeModal();render();
   toast(editIdx!==null?`✅ ${s.name} diperbarui`:`✅ ${s.name} ditambahkan`);
+}
+
+function toggleInactiveFromModal(){
+  if(editIdx===null) return;
+  const s=students[editIdx];
+  const btn=document.getElementById('inactiveToggleBtn');
+
+  // Aktifkan kembali tidak perlu konfirmasi, langsung jalan
+  if(s.inactive){
+    s.inactive=false;
+    save();
+    closeModal();
+    render();
+    toast(`▶️ ${s.name} diaktifkan kembali`);
+    return;
+  }
+
+  // Nonaktifkan perlu konfirmasi dulu (klik pertama = peringatan, klik kedua = eksekusi)
+  if(btn.dataset.confirm!=='yes'){
+    btn.dataset.confirm='yes';
+    btn.textContent='⚠️ Yakin nonaktifkan?';
+    btn.style.background='#fef3c7';
+    btn.style.setProperty('border','1.5px solid #d97706','important');
+    btn.style.color='#92400e';
+    setTimeout(()=>{
+      if(btn.dataset.confirm==='yes'){
+        btn.dataset.confirm='';
+        btn.textContent='⏸️ Nonaktifkan';
+        btn.style.background='#fff9f0';
+        btn.style.setProperty('border','1.5px solid rgba(217,119,6,0.3)','important');
+        btn.style.color='#b45309';
+      }
+    },3000);
+    return;
+  }
+
+  // Konfirmasi kedua kali — eksekusi
+  btn.dataset.confirm='';
+  s.inactive=true;
+  save();
+  closeModal();
+  render();
+  toast(`⏸️ ${s.name} dinonaktifkan — riwayat tetap tersimpan`);
+}
+
+function reactivateStudent(name){
+  const s=students.find(x=>x.name===name);
+  if(!s) return;
+  s.inactive=false;
+  save();
+  render();
+  toast(`▶️ ${name} diaktifkan kembali`);
 }
 
 function doDelete(){
@@ -3622,7 +3734,7 @@ function doDelete(){
   const btn=document.getElementById('delBtn');
   if(btn.dataset.confirm!=='yes'){
     btn.dataset.confirm='yes';
-    btn.textContent='⚠️ Yakin hapus?';
+    btn.textContent='⚠️ Riwayat ikut hilang, yakin?';
     btn.style.background='var(--red)';
     btn.style.color='#fff';
     setTimeout(()=>{
