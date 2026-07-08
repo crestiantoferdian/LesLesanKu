@@ -2011,7 +2011,7 @@ function renderStudentProfile(name, period){
   document.getElementById('mainContent').innerHTML =
     '<div class="page-title-area">'
       +'<div style="display:flex;align-items:center;justify-content:space-between">'
-        +'<div class="hist-back" onclick="window._profileFrom===\'absensi\'?setTab(\'absensi\'):renderSiswa()"><span>‹</span><div class="hist-back-label">Kembali</div></div>'
+        +'<div class="hist-back" onclick="window._profileFrom===\'absensi\'?setTab(\'absensi\'):(window._profileFrom===\'track\'?setTab(\'track\'):renderSiswa())"><span>‹</span><div class="hist-back-label">Kembali</div></div>'
         +(studentIdx>=0?'<button onclick="openEdit('+studentIdx+')" style="display:flex;align-items:center;gap:5px;padding:8px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--card);color:var(--text);font-family:sans-serif;font-size:0.82rem;font-weight:600;cursor:pointer">✏️ Edit Murid</button>':'')
       +'</div>'
       +'<div style="display:flex;align-items:center;gap:13px;margin-top:12px">'
@@ -2713,11 +2713,9 @@ function buildTrackCards(){
   }).join('');
 }
 
-// ── HISTORY DETAIL ────────────────────────────────────
+// ── HISTORY DETAIL (Track) — pakai tampilan profil yang sama dengan tab Siswa ──
 function openHistoryDetail(name){
-  viewingStudent=name;
-  history.pushState({tab:'track', view:'sub', student:name},'');
-  renderHistoryDetail();
+  openStudentReport(name, 'track');
 }
 
 function renderHistoryDetail(){
