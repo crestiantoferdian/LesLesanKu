@@ -2972,10 +2972,12 @@ function renderLinkFolderView(folderId){
     </div>`).join('');
 
   document.getElementById('mainContent').innerHTML=
-    `<div class="page-title-area hist-back" style="position:relative">
-      <button onclick="closeLinkFolder()" style="position:absolute;top:10px;left:20px;width:40px;height:40px;border-radius:12px;border:1.5px solid var(--border);background:var(--card);font-size:1.2rem;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:var(--shadow-xs)">←</button>
-      <button onclick="openEditFolderModal('${folder.id}')" style="position:absolute;top:10px;right:20px;width:40px;height:40px;border-radius:12px;border:1.5px solid var(--border);background:var(--card);font-size:1.1rem;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:var(--shadow-xs)">✏️</button>
-      <div class="page-title" style="margin:0;text-align:center">${folder.icon||'📁'} ${escapeHtml(folder.name)}</div>
+    `<div class="page-title-area hist-back">
+      <div style="display:flex;align-items:center;gap:10px">
+        <button onclick="closeLinkFolder()" style="flex-shrink:0;width:40px;height:40px;border-radius:12px;border:1.5px solid var(--border);background:var(--card);font-size:1.2rem;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:var(--shadow-xs)">←</button>
+        <div class="page-title" style="margin:0;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:center">${folder.icon||'📁'} ${escapeHtml(folder.name)}</div>
+        <button onclick="openEditFolderModal('${folder.id}')" style="flex-shrink:0;width:40px;height:40px;border-radius:12px;border:1.5px solid var(--border);background:var(--card);font-size:1.1rem;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:var(--shadow-xs)">✏️</button>
+      </div>
       <div class="page-sub" style="text-align:center">${links.length} tautan di folder ini</div>
     </div>
     <div style="padding:0 20px 24px">
