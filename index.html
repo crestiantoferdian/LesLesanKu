@@ -2243,7 +2243,6 @@ function buildDateDetail(dk){
   }
 
   const todayDk=todayStr();
-  const isPastDay=dk<todayDk;
   let hadirC=0,izinC=0,alpaC=0,belumC=0;
   const rows=scheduled.map(s=>{
     const isSamedayRs=!!s._sameday_reschedule;
@@ -2293,35 +2292,24 @@ function buildDateDetail(dk){
     if(status==='alpa'&&note.reason) noteHtml=`<div style="font-size:0.7rem;color:var(--alpa);margin-top:3px">✗ ${note.reason}</div>`;
     if(status==='izin') noteHtml=`<div style="font-size:0.72rem;color:#d97706;font-weight:600;margin-top:3px">✋ Izin${note.reason?' · '+note.reason:''}</div>`;
 
-    const statusColors={hadir:'var(--hadir)',izin:'#f97316',alpa:'#dc2626',belum:'var(--muted)'};
-    const statusLabels={hadir:'✅ Hadir',izin:'✋ Izin',alpa:'✗ Alpa',belum:'— Belum'};
-    const attBtns=!isPastDay?`
+    const attBtns=`
         <div class="att-btns" onclick="event.stopPropagation()" style="margin-top:8px">
           <button class="att-btn a-hadir ${status==='hadir'?'on':''}" onclick="openNoteModal('${safeKey}','hadir','${safeName}','${safeDk}');setTimeout(renderTrack,300)">✅</button>
           <button class="att-btn a-izin ${status==='izin'?'on':''}" onclick="openNoteModal('${safeKey}','izin','${safeName}','${safeDk}');setTimeout(renderTrack,300)">✋</button>
           <button class="att-btn a-alpa ${status==='alpa'?'on':''}" onclick="openNoteModal('${safeKey}','alpa','${safeName}','${safeDk}');setTimeout(renderTrack,300)">✗</button>
           <button class="att-btn" onclick="openTrackEditModal('${safeKey}','${status||'hadir'}','${safeName}','${safeDk}')">✏️</button>
+          ${s.sheetLink&&status!=='izin'?`<button class="att-btn sheet-btn-${sidx}" onclick="openSheetLinkByName('${safeName}','${safeDk}')" style="${localStorage.getItem('sheet_sent_'+safeDk+'_'+s.name.replace(/[^a-zA-Z0-9]/g,'_'))?'background:#eafaf1;border-color:rgba(29,158,78,0.4)':'background:var(--blue-bg);border-color:rgba(0,113,227,0.3)'}">${localStorage.getItem('sheet_sent_'+safeDk+'_'+s.name.replace(/[^a-zA-Z0-9]/g,'_'))?'✅':'📨'}</button>`:''}
           ${status!=='belum'?`<button class="att-btn" onclick="deleteAttendance('${safeName}','${safeDk}')" style="border-color:rgba(220,38,38,0.25);background:#fff5f5;color:var(--alpa)">🗑</button>`:''}
-        </div>`
-      :`<div class="past-info" onclick="event.stopPropagation()" style="background:var(--bg);border-radius:10px;padding:8px 12px;border:1px solid var(--border)">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
-            <div style="font-size:0.78rem;font-weight:700;color:${statusColors[status]||'var(--muted)'}">${statusLabels[status]||status}</div>
-            ${status!=='belum'?`<button class="att-btn" onclick="openTrackEditModal('${safeKey}','${status||'hadir'}','${safeName}','${safeDk}')" style="width:28px;height:28px;font-size:0.75rem">✏️</button>`:''}
-          </div>
-          ${note.progress?`<div style="font-size:0.75rem;color:var(--text2)">📝 ${note.progress}</div>`:''}
-          ${note.reason?`<div style="font-size:0.75rem;color:var(--muted)">💬 ${note.reason}</div>`:''}
-          ${!note.progress&&!note.reason?'<div style="font-size:0.75rem;color:var(--muted);font-style:italic">Tidak ada catatan</div>':''}
         </div>`;
 
-    // Di hari lewat: klik buka profil siswa. Di hari ini/akan datang: expand untuk tombol aksi
-    const cardOnclick=isPastDay
-      ?`openHistoryDetail('${safeName}','track')`
-      :`toggleSItem(this)`;
+    // Tap kartu untuk expand/collapse tombol aksi (Hadir/Izin/Alpa/Kirim Link),
+    // sama seperti di tab Absensi — berlaku untuk semua tanggal termasuk yang sudah lewat.
+    const cardOnclick=`toggleSItem(this)`;
     return `<div class="s-item status-${status}" style="margin:0 0 1px;border-radius:0;${borderStyle};cursor:pointer" onclick="${cardOnclick}">
       <div class="s-avatar ${isVokal?'vocal':''}" style="${avatarStyle}position:relative">${icon}</div>
       <div class="s-body">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:4px">
-          <div class="s-name" style="${nameStyle}flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${s.name}</div>
+          <div class="s-name" onclick="event.stopPropagation();openHistoryDetail('${safeName}','track')" style="${nameStyle}flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-decoration:underline;text-underline-offset:3px;text-decoration-color:rgba(0,0,0,0.15)">${s.name}</div>
           <div style="flex-shrink:0"><span style="${timeStyle}">${s.time}${s.time2?'–'+s.time2:''}</span></div>
         </div>
         ${s._isRescheduled?'<div style="font-size:0.72rem;color:var(--blue);font-weight:600;margin-top:2px">🔄 Reschedule</div>':''}
@@ -3210,8 +3198,25 @@ function showAllStudents(){
     <div class="lainnya-wrap"><div class="menu-card">${html}</div></div>`;
 }
 
+// Kumpulkan semua status "sudah dikirim ke sheet" dari localStorage,
+// supaya ikut tersimpan di backup (sebelumnya tercecer, tidak ikut backup).
+function collectSheetSentData(){
+  const out={};
+  for(let i=0;i<localStorage.length;i++){
+    const k=localStorage.key(i);
+    if(k&&k.startsWith('sheet_sent_')) out[k]=localStorage.getItem(k);
+  }
+  return out;
+}
+function restoreSheetSentData(obj){
+  if(!obj) return;
+  Object.entries(obj).forEach(([k,v])=>{
+    if(k&&k.startsWith('sheet_sent_')) localStorage.setItem(k,v);
+  });
+}
+
 function exportData(){
-  const data={students,attendance,attNotes,exportedAt:new Date().toISOString(),version:'4'};
+  const data={students,attendance,attNotes,quickLinks,sheetSent:collectSheetSentData(),exportedAt:new Date().toISOString(),version:'5'};
   const json=JSON.stringify(data,null,2);
   const tgl=new Date().toLocaleDateString('id-ID',{day:'2-digit',month:'2-digit',year:'numeric'}).replace(/\//g,'-');
   // Langsung tampilkan halaman backup — jangan share dulu
@@ -3405,6 +3410,8 @@ function readImportFile(input){
       students=data.students||[];
       attendance=data.attendance||{};
       attNotes=data.attNotes||data.attendanceNotes||{};
+      quickLinks=data.quickLinks||[];
+      restoreSheetSentData(data.sheetSent);
       save();render();
       toast('✅ Data dipulihkan! '+students.length+' murid.');
     }catch(err){
@@ -3441,6 +3448,8 @@ function doImportFromText(){
     students=data.students||[];
     attendance=data.attendance||{};
     attNotes=data.attNotes||data.attendanceNotes||{};
+    quickLinks=data.quickLinks||[];
+    restoreSheetSentData(data.sheetSent);
     save();renderLainnya();render();
     toast('✅ Data dipulihkan! '+students.length+' murid.');
   }catch(err){
@@ -4126,10 +4135,14 @@ function markSheetSent(idx,sentKey){
   if(popup) popup.remove();
   document.querySelectorAll('.sheet-btn-'+idx).forEach(btn=>{
     btn.style.background='#eafaf1';
-    btn.style.borderColor='rgba(29,158,78,0.4)';
+    btn.style.setProperty('border-color','rgba(29,158,78,0.4)','important');
     btn.textContent='✅';
   });
   toast('✅ Ditandai sudah tercatat');
+  // Render ulang halaman yang sedang aktif supaya tampilan pasti sinkron
+  // dengan status tersimpan, terlepas dari tab/tampilan mana tombolnya ditekan.
+  if(currentTab==='absensi') setTimeout(renderAbsensi,150);
+  else if(currentTab==='track') setTimeout(renderTrack,150);
 }
 
 // ── TOAST ─────────────────────────────────────────────
