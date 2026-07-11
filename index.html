@@ -850,6 +850,61 @@ function checkNotifications(){
       showNotif(`🎵 ${s.name} dalam 5 menit!`,`${effectiveTime} · ${s.instrument||'LesLesanKu'}`);
     }
   });
+
+  // ── Pengingat: tombol amplop (kirim link) belum dicentang ──
+  checkSheetSentReminder(dateKey, todayName);
+  // ── Pengingat: laporan tab Kirim hari ini belum di-copy ──
+  checkKirimCopyReminder(dateKey);
+}
+
+function checkSheetSentReminder(dateKey, todayName){
+  const remKey='sheet_remind_'+dateKey;
+  if(notifShown[remKey]) return; // sudah diingatkan hari ini
+
+  // Tunggu sampai jam yang diatur user sebelum bunyi
+  const remindTime=localStorage.getItem('llk_notif_sheet_time')||'20:00';
+  const [rh,rm]=remindTime.split(':').map(Number);
+  const now=new Date();
+  const threshold=new Date(now.getFullYear(),now.getMonth(),now.getDate(),rh,rm);
+  if(now<threshold) return;
+
+  const belumKirim=[];
+  const scheduled=getStudentsForDay(todayName, dateKey);
+  scheduled.forEach(s=>{
+    if(!s.sheetLink) return;
+    const attKey=s._attKey||s.name;
+    const attDateKey=s._extraDate||dateKey;
+    const status=(attendance[attDateKey]||{})[attKey];
+    if(status!=='hadir') return; // hanya ingatkan untuk yang sudah HADIR
+    const sentKey='sheet_sent_'+attDateKey+'_'+s.name.replace(/[^a-zA-Z0-9]/g,'_');
+    if(!localStorage.getItem(sentKey)) belumKirim.push(s.name);
+  });
+
+  if(belumKirim.length){
+    notifShown[remKey]=true;
+    const names=belumKirim.length<=2?belumKirim.join(', '):belumKirim.slice(0,2).join(', ')+` +${belumKirim.length-2} lagi`;
+    showNotif(`📨 ${belumKirim.length} link belum dikirim`,`${names} — tombol amplop belum dicentang`);
+  }
+}
+
+function checkKirimCopyReminder(dateKey){
+  const remKey='kirim_remind_'+dateKey;
+  if(notifShown[remKey]) return; // sudah diingatkan hari ini
+  if(localStorage.getItem('kirim_copied_'+dateKey)) return; // sudah pernah di-copy
+
+  // Tunggu sampai jam yang diatur user sebelum bunyi
+  const remindTime=localStorage.getItem('llk_notif_kirim_time')||'20:00';
+  const [rh,rm]=remindTime.split(':').map(Number);
+  const now=new Date();
+  const threshold=new Date(now.getFullYear(),now.getMonth(),now.getDate(),rh,rm);
+  if(now<threshold) return;
+
+  const dayAtt=attendance[dateKey]||{};
+  const hasActivity=Object.values(dayAtt).some(st=>st==='hadir'||st==='izin'||st==='alpa');
+  if(!hasActivity) return; // belum ada yang diabsen sama sekali, belum perlu diingatkan
+
+  notifShown[remKey]=true;
+  showNotif('📋 Laporan Kirim belum di-copy','Buka tab Kirim untuk menyalin laporan hari ini');
 }
 setInterval(checkNotifications,30000);
 checkNotifications();
@@ -2855,21 +2910,30 @@ function renderKirim(){
     </div>`;
 
   window._kirimText = copyText;
+  window._kirimDateKey = dateKey;
 }
 
 function kirimCopy(){
   const txt = window._kirimText||'';
   if(!txt){toast('Tidak ada data untuk disalin');return;}
+  const dk=window._kirimDateKey||todayStr();
   if(navigator.clipboard&&navigator.clipboard.writeText){
-    navigator.clipboard.writeText(txt).then(()=>toast('✅ Tersalin! Buka Sheets lalu Paste.')).catch(()=>fallbackKirimCopy(txt));
-  } else fallbackKirimCopy(txt);
+    navigator.clipboard.writeText(txt).then(()=>{
+      localStorage.setItem('kirim_copied_'+dk,'1');
+      toast('✅ Tersalin! Buka Sheets lalu Paste.');
+    }).catch(()=>fallbackKirimCopy(txt,dk));
+  } else fallbackKirimCopy(txt,dk);
 }
 
-function fallbackKirimCopy(txt){
+function fallbackKirimCopy(txt,dk){
   const ta=document.createElement('textarea');
   ta.value=txt;ta.style.position='fixed';ta.style.opacity='0';
   document.body.appendChild(ta);ta.select();
-  try{document.execCommand('copy');toast('✅ Tersalin! Buka Sheets lalu Paste.');}
+  try{
+    document.execCommand('copy');
+    localStorage.setItem('kirim_copied_'+(dk||todayStr()),'1');
+    toast('✅ Tersalin! Buka Sheets lalu Paste.');
+  }
   catch(e){toast('Gagal salin otomatis');}
   document.body.removeChild(ta);
 }
@@ -3810,9 +3874,28 @@ function renderNotifSettings(){
         </div>
       </div>
       <button onclick="testNotifSound()"
-        style="width:100%;padding:14px;background:var(--red);color:#fff;border:none;border-radius:12px;font-family:sans-serif;font-size:0.9rem;font-weight:700;cursor:pointer">
+        style="width:100%;padding:14px;background:var(--red);color:#fff;border:none;border-radius:12px;font-family:sans-serif;font-size:0.9rem;font-weight:700;cursor:pointer;margin-bottom:16px">
         🔔 Tes Suara Sekarang
       </button>
+
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:16px">
+        <div style="font-size:0.72rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px">⏰ Jam Pengingat Harian</div>
+        <div style="font-size:0.78rem;color:var(--muted);margin-bottom:14px;line-height:1.5">Atur jam berapa pengingat di bawah ini boleh mulai bunyi (bukan langsung saat itu juga).</div>
+
+        <div style="margin-bottom:14px">
+          <label style="font-size:0.82rem;font-weight:700;color:var(--text);display:block;margin-bottom:6px">📨 Amplop belum dicentang</label>
+          <input type="time" id="notifSheetTime" value="${localStorage.getItem('llk_notif_sheet_time')||'20:00'}"
+            onchange="localStorage.setItem('llk_notif_sheet_time',this.value);toast('✅ Jam pengingat amplop disimpan')"
+            style="width:100%;padding:11px 14px;border:1.5px solid var(--border);border-radius:10px;font-family:'DM Sans',sans-serif;font-size:0.9rem;color:var(--text);background:var(--bg)">
+        </div>
+
+        <div>
+          <label style="font-size:0.82rem;font-weight:700;color:var(--text);display:block;margin-bottom:6px">📋 Laporan Kirim belum di-copy</label>
+          <input type="time" id="notifKirimTime" value="${localStorage.getItem('llk_notif_kirim_time')||'20:00'}"
+            onchange="localStorage.setItem('llk_notif_kirim_time',this.value);toast('✅ Jam pengingat Kirim disimpan')"
+            style="width:100%;padding:11px 14px;border:1.5px solid var(--border);border-radius:10px;font-family:'DM Sans',sans-serif;font-size:0.9rem;color:var(--text);background:var(--bg)">
+        </div>
+      </div>
     </div>`;
 }
 
