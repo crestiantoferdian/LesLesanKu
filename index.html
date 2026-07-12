@@ -679,6 +679,17 @@ body{
       <div id="linkIconPicker" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px"></div>
       <input type="text" id="f_link_icon_custom" placeholder="Atau ketik/tempel ikon sendiri di sini (pakai keyboard emoji HP)" maxlength="8" oninput="pickLinkIcon(this.value||'📁',true)"/>
     </div>
+    <div class="mfield">
+      <label>Atau Pakai Foto Sendiri</label>
+      <div style="display:flex;align-items:center;gap:12px">
+        <div id="linkPhotoPreview" style="width:52px;height:52px;border-radius:12px;border:1.5px dashed var(--border);background:var(--bg);display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden;font-size:1.4rem;color:var(--muted)">🖼️</div>
+        <div style="flex:1;display:flex;gap:8px">
+          <button type="button" onclick="pickLinkPhoto()" style="flex:1;padding:10px;background:var(--card);border:1.5px solid var(--border);border-radius:10px;font-family:sans-serif;font-size:0.8rem;font-weight:700;color:var(--text);cursor:pointer">📷 Pilih Foto</button>
+          <button type="button" id="linkPhotoRemoveBtn" onclick="removeLinkPhoto()" style="display:none;padding:10px 14px;background:#fff5f5;border:1.5px solid rgba(220,38,38,0.25);border-radius:10px;font-family:sans-serif;font-size:0.8rem;font-weight:700;color:var(--alpa);cursor:pointer">✕</button>
+        </div>
+        <input type="file" id="linkPhotoInput" accept="image/*" style="display:none" onchange="loadLinkPhoto(this)">
+      </div>
+    </div>
     <div class="mfield" id="linkUrlField">
       <label>Link Tujuan</label>
       <input type="url" id="f_link_url" placeholder="https://..."/>
@@ -2959,6 +2970,13 @@ function pickLinkIcon(ic, fromCustomInput){
   renderIconPicker(fromCustomInput);
 }
 
+function linkIconHtml(item, fallbackEmoji){
+  if(item&&item.photo){
+    return `<span style="width:32px;height:32px;border-radius:9px;overflow:hidden;flex-shrink:0;display:inline-block"><img src="${item.photo}" style="width:100%;height:100%;object-fit:cover"/></span>`;
+  }
+  return `<span style="font-size:1.3rem;flex-shrink:0">${(item&&item.icon)||fallbackEmoji}</span>`;
+}
+
 function renderLinks(){
   if(viewingLinkFolder){ renderLinkFolderView(viewingLinkFolder); return; }
 
@@ -2970,7 +2988,7 @@ function renderLinks(){
     return `
     <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px 16px;margin-bottom:10px;display:flex;align-items:center;gap:12px;box-shadow:var(--shadow-xs)">
       <button onclick="openLinkFolder('${f.id}')" style="flex:1;min-width:0;display:flex;align-items:center;gap:10px;background:none;border:none;text-align:left;cursor:pointer;padding:0">
-        <span style="font-size:1.3rem;flex-shrink:0">${f.icon||'📁'}</span>
+        ${linkIconHtml(f,'📁')}
         <span style="min-width:0">
           <div style="font-weight:700;font-size:0.95rem;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(f.name)}</div>
           <div style="font-size:0.72rem;color:var(--muted)">${count} tautan</div>
@@ -2983,7 +3001,7 @@ function renderLinks(){
   const linkItems=topLinks.map(l=>`
     <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px 16px;margin-bottom:10px;display:flex;align-items:center;gap:12px;box-shadow:var(--shadow-xs)">
       <button onclick="openQuickLink('${l.id}')" style="flex:1;min-width:0;display:flex;align-items:center;gap:10px;background:none;border:none;text-align:left;cursor:pointer;padding:0">
-        <span style="font-size:1.3rem;flex-shrink:0">${l.icon||'🔗'}</span>
+        ${linkIconHtml(l,'🔗')}
         <span style="min-width:0">
           <div style="font-weight:700;font-size:0.95rem;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(l.name)}</div>
         </span>
@@ -3015,7 +3033,7 @@ function renderLinkFolderView(folderId){
   const linkItems=links.map(l=>`
     <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px 16px;margin-bottom:10px;display:flex;align-items:center;gap:12px;box-shadow:var(--shadow-xs)">
       <button onclick="openQuickLink('${l.id}')" style="flex:1;min-width:0;display:flex;align-items:center;gap:10px;background:none;border:none;text-align:left;cursor:pointer;padding:0">
-        <span style="font-size:1.3rem;flex-shrink:0">${l.icon||'🔗'}</span>
+        ${linkIconHtml(l,'🔗')}
         <span style="min-width:0">
           <div style="font-weight:700;font-size:0.95rem;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(l.name)}</div>
         </span>
@@ -3027,7 +3045,7 @@ function renderLinkFolderView(folderId){
     `<div class="page-title-area hist-back">
       <div style="display:flex;align-items:center;gap:10px">
         <button onclick="closeLinkFolder()" style="flex-shrink:0;width:40px;height:40px;border-radius:12px;border:1.5px solid var(--border);background:var(--card);font-size:1.2rem;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:var(--shadow-xs)">←</button>
-        <div class="page-title" style="margin:0;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:center">${folder.icon||'📁'} ${escapeHtml(folder.name)}</div>
+        <div class="page-title" style="margin:0;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:center;display:flex;align-items:center;justify-content:center;gap:8px">${folder.photo?`<img src="${folder.photo}" style="width:28px;height:28px;border-radius:8px;object-fit:cover;flex-shrink:0"/>`:(folder.icon||'📁')} <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(folder.name)}</span></div>
         <button onclick="openEditFolderModal('${folder.id}')" style="flex-shrink:0;width:40px;height:40px;border-radius:12px;border:1.5px solid var(--border);background:var(--card);font-size:1.1rem;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:var(--shadow-xs)">✏️</button>
       </div>
       <div class="page-sub" style="text-align:center">${links.length} tautan di folder ini</div>
@@ -3053,6 +3071,49 @@ function closeLinkFolder(){
 let editingLinkId=null;
 let linkModalMode='link'; // 'link' | 'folder'
 let pendingLinkFolderId=null; // folder tujuan saat menambah link baru
+let selectedLinkPhoto=null; // base64 foto custom, null = pakai ikon/emoji
+
+function pickLinkPhoto(){
+  document.getElementById('linkPhotoInput').click();
+}
+
+function loadLinkPhoto(input){
+  const file=input.files[0];
+  if(!file) return;
+  if(file.size>2*1024*1024){
+    toast('❌ Foto terlalu besar! Maksimal 2MB');
+    input.value='';
+    return;
+  }
+  const reader=new FileReader();
+  reader.onload=function(e){
+    selectedLinkPhoto=e.target.result;
+    updateLinkPhotoPreview();
+    toast('✅ Foto dipilih');
+  };
+  reader.readAsDataURL(file);
+}
+
+function removeLinkPhoto(){
+  selectedLinkPhoto=null;
+  document.getElementById('linkPhotoInput').value='';
+  updateLinkPhotoPreview();
+}
+
+function updateLinkPhotoPreview(){
+  const prev=document.getElementById('linkPhotoPreview');
+  const delBtn=document.getElementById('linkPhotoRemoveBtn');
+  if(!prev) return;
+  if(selectedLinkPhoto){
+    prev.innerHTML=`<img src="${selectedLinkPhoto}" style="width:100%;height:100%;object-fit:cover"/>`;
+    prev.style.border='1.5px solid var(--border)';
+    if(delBtn) delBtn.style.display='block';
+  } else {
+    prev.innerHTML='🖼️';
+    prev.style.border='1.5px dashed var(--border)';
+    if(delBtn) delBtn.style.display='none';
+  }
+}
 
 function openAddLinkModal(folderId){
   editingLinkId=null;
@@ -3066,6 +3127,9 @@ function openAddLinkModal(folderId){
   document.getElementById('linkUrlField').style.display='flex';
   document.getElementById('linkDelBtn').style.display='none';
   selectedLinkIcon='🔗';
+  selectedLinkPhoto=null;
+  document.getElementById('linkPhotoInput').value='';
+  updateLinkPhotoPreview();
   renderIconPicker();
   history.pushState({tab:currentTab, view:'modal'},'');
   document.getElementById('linkOverlay').classList.add('open');
@@ -3083,6 +3147,9 @@ function openEditLinkModal(id){
   document.getElementById('linkUrlField').style.display='flex';
   document.getElementById('linkDelBtn').style.display='block';
   selectedLinkIcon=l.icon||'🔗';
+  selectedLinkPhoto=l.photo||null;
+  document.getElementById('linkPhotoInput').value='';
+  updateLinkPhotoPreview();
   renderIconPicker();
   history.pushState({tab:currentTab, view:'modal'},'');
   document.getElementById('linkOverlay').classList.add('open');
@@ -3098,6 +3165,9 @@ function openAddFolderModal(){
   document.getElementById('linkUrlField').style.display='none';
   document.getElementById('linkDelBtn').style.display='none';
   selectedLinkIcon='📁';
+  selectedLinkPhoto=null;
+  document.getElementById('linkPhotoInput').value='';
+  updateLinkPhotoPreview();
   renderIconPicker();
   history.pushState({tab:currentTab, view:'modal'},'');
   document.getElementById('linkOverlay').classList.add('open');
@@ -3114,6 +3184,9 @@ function openEditFolderModal(id){
   document.getElementById('linkUrlField').style.display='none';
   document.getElementById('linkDelBtn').style.display='block';
   selectedLinkIcon=f.icon||'📁';
+  selectedLinkPhoto=f.photo||null;
+  document.getElementById('linkPhotoInput').value='';
+  updateLinkPhotoPreview();
   renderIconPicker();
   history.pushState({tab:currentTab, view:'modal'},'');
   document.getElementById('linkOverlay').classList.add('open');
@@ -3130,9 +3203,9 @@ function saveQuickLink(){
   if(linkModalMode==='folder'){
     if(editingLinkId){
       const f=quickLinks.find(x=>x.id===editingLinkId);
-      if(f){ f.name=name; f.icon=selectedLinkIcon; }
+      if(f){ f.name=name; f.icon=selectedLinkIcon; f.photo=selectedLinkPhoto; }
     } else {
-      quickLinks.push({id:'folder_'+Date.now(), type:'folder', name, icon:selectedLinkIcon});
+      quickLinks.push({id:'folder_'+Date.now(), type:'folder', name, icon:selectedLinkIcon, photo:selectedLinkPhoto});
     }
     save();
     closeLinkModal();
@@ -3146,9 +3219,9 @@ function saveQuickLink(){
   if(!/^https?:\/\//i.test(url)) url='https://'+url;
   if(editingLinkId){
     const l=quickLinks.find(x=>x.id===editingLinkId);
-    if(l){ l.name=name; l.url=url; l.icon=selectedLinkIcon; }
+    if(l){ l.name=name; l.url=url; l.icon=selectedLinkIcon; l.photo=selectedLinkPhoto; }
   } else {
-    quickLinks.push({id:'link_'+Date.now(), type:'link', name, url, icon:selectedLinkIcon, folderId:pendingLinkFolderId});
+    quickLinks.push({id:'link_'+Date.now(), type:'link', name, url, icon:selectedLinkIcon, photo:selectedLinkPhoto, folderId:pendingLinkFolderId});
   }
   save();
   closeLinkModal();
@@ -3264,23 +3337,52 @@ function showAllStudents(){
 
 // Kumpulkan semua status "sudah dikirim ke sheet" dari localStorage,
 // supaya ikut tersimpan di backup (sebelumnya tercecer, tidak ikut backup).
-function collectSheetSentData(){
+// Key dinamis (per-tanggal/per-siswa) yang perlu ikut backup, dikenali dari prefix-nya
+const BACKUP_PREFIXES=['sheet_sent_','kirim_copied_'];
+function collectPrefixedData(){
   const out={};
   for(let i=0;i<localStorage.length;i++){
     const k=localStorage.key(i);
-    if(k&&k.startsWith('sheet_sent_')) out[k]=localStorage.getItem(k);
+    if(k&&BACKUP_PREFIXES.some(p=>k.startsWith(p))) out[k]=localStorage.getItem(k);
   }
   return out;
 }
-function restoreSheetSentData(obj){
+function restorePrefixedData(obj){
   if(!obj) return;
   Object.entries(obj).forEach(([k,v])=>{
-    if(k&&k.startsWith('sheet_sent_')) localStorage.setItem(k,v);
+    if(k&&BACKUP_PREFIXES.some(p=>k.startsWith(p))) localStorage.setItem(k,v);
+  });
+}
+
+// Pengaturan tunggal (branding, nomor admin WA, preferensi notifikasi) yang juga perlu ikut backup
+const BACKUP_SETTINGS_KEYS=[
+  'rms_school_name','rms_school_sub','rms_school_logo','rms_school_logo_img','rms_school_color',
+  'rms4_admin_wa',
+  'llk_notif_sound','llk_notif_volume','llk_notif_custom_mp3','llk_notif_custom_name',
+  'llk_notif_sheet_time','llk_notif_kirim_time','llk_income_hidden'
+];
+function collectSettingsData(){
+  const out={};
+  BACKUP_SETTINGS_KEYS.forEach(k=>{
+    const v=localStorage.getItem(k);
+    if(v!==null) out[k]=v;
+  });
+  return out;
+}
+function restoreSettingsData(obj){
+  if(!obj) return;
+  Object.entries(obj).forEach(([k,v])=>{
+    if(BACKUP_SETTINGS_KEYS.includes(k)) localStorage.setItem(k,v);
   });
 }
 
 function exportData(){
-  const data={students,attendance,attNotes,quickLinks,sheetSent:collectSheetSentData(),exportedAt:new Date().toISOString(),version:'5'};
+  const data={
+    students,attendance,attNotes,quickLinks,
+    misc:collectPrefixedData(),
+    settings:collectSettingsData(),
+    exportedAt:new Date().toISOString(),version:'6'
+  };
   const json=JSON.stringify(data,null,2);
   const tgl=new Date().toLocaleDateString('id-ID',{day:'2-digit',month:'2-digit',year:'numeric'}).replace(/\//g,'-');
   // Langsung tampilkan halaman backup — jangan share dulu
@@ -3475,8 +3577,9 @@ function readImportFile(input){
       attendance=data.attendance||{};
       attNotes=data.attNotes||data.attendanceNotes||{};
       quickLinks=data.quickLinks||[];
-      restoreSheetSentData(data.sheetSent);
-      save();render();
+      restorePrefixedData(data.misc||data.sheetSent||{}); // dukung format backup lama juga
+      restoreSettingsData(data.settings);
+      save();applySettings();render();
       toast('✅ Data dipulihkan! '+students.length+' murid.');
     }catch(err){
       document.getElementById('importStatus').textContent='❌ Gagal baca: '+err.message;
@@ -3513,8 +3616,9 @@ function doImportFromText(){
     attendance=data.attendance||{};
     attNotes=data.attNotes||data.attendanceNotes||{};
     quickLinks=data.quickLinks||[];
-    restoreSheetSentData(data.sheetSent);
-    save();renderLainnya();render();
+    restorePrefixedData(data.misc||data.sheetSent||{}); // dukung format backup lama juga
+    restoreSettingsData(data.settings);
+    save();applySettings();renderLainnya();render();
     toast('✅ Data dipulihkan! '+students.length+' murid.');
   }catch(err){
     toast('❌ Format tidak valid: '+err.message);
