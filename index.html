@@ -691,8 +691,8 @@ body{
       </div>
     </div>
     <div class="mfield" id="linkUrlField">
-      <label>Link Tujuan</label>
-      <input type="url" id="f_link_url" placeholder="https://..."/>
+      <label>Link Tujuan <span style="font-weight:400;color:var(--muted)">(boleh kosong kalau kamu pasang foto)</span></label>
+      <input type="url" id="f_link_url" placeholder="https://... (opsional kalau ada foto)"/>
     </div>
     <div class="mactions">
       <button class="mbtn mbtn-cancel" onclick="closeLinkModal()">Batal</button>
@@ -3004,6 +3004,7 @@ function renderLinks(){
         ${linkIconHtml(l,'🔗')}
         <span style="min-width:0">
           <div style="font-weight:700;font-size:0.95rem;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(l.name)}</div>
+          ${!l.url&&l.photo?'<div style="font-size:0.7rem;color:var(--muted)">🖼️ Foto</div>':''}
         </span>
       </button>
       <button onclick="openEditLinkModal('${l.id}')" style="flex-shrink:0;width:36px;height:36px;border-radius:10px;border:1px solid var(--border);background:var(--card);font-size:1rem;cursor:pointer;display:flex;align-items:center;justify-content:center">✏️</button>
@@ -3036,6 +3037,7 @@ function renderLinkFolderView(folderId){
         ${linkIconHtml(l,'🔗')}
         <span style="min-width:0">
           <div style="font-weight:700;font-size:0.95rem;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(l.name)}</div>
+          ${!l.url&&l.photo?'<div style="font-size:0.7rem;color:var(--muted)">🖼️ Foto</div>':''}
         </span>
       </button>
       <button onclick="openEditLinkModal('${l.id}')" style="flex-shrink:0;width:36px;height:36px;border-radius:10px;border:1px solid var(--border);background:var(--card);font-size:1rem;cursor:pointer;display:flex;align-items:center;justify-content:center">✏️</button>
@@ -3215,8 +3217,8 @@ function saveQuickLink(){
   }
 
   let url=document.getElementById('f_link_url').value.trim();
-  if(!url){ toast('Link tujuan wajib diisi'); return; }
-  if(!/^https?:\/\//i.test(url)) url='https://'+url;
+  if(!url&&!selectedLinkPhoto){ toast('Isi link tujuan, atau pasang foto kalau tidak ada link'); return; }
+  if(url&&!/^https?:\/\//i.test(url)) url='https://'+url;
   if(editingLinkId){
     const l=quickLinks.find(x=>x.id===editingLinkId);
     if(l){ l.name=name; l.url=url; l.icon=selectedLinkIcon; l.photo=selectedLinkPhoto; }
@@ -3226,7 +3228,7 @@ function saveQuickLink(){
   save();
   closeLinkModal();
   renderLinks();
-  toast('✅ Tautan disimpan');
+  toast('✅ Tersimpan');
 }
 
 function deleteQuickLink(){
@@ -3247,7 +3249,27 @@ function deleteQuickLink(){
 function openQuickLink(id){
   const l=quickLinks.find(x=>x.id===id);
   if(!l) return;
-  window.open(l.url,'_blank');
+  if(l.url){ window.open(l.url,'_blank'); return; }
+  if(l.photo){ openImageViewer(l.photo,l.name); return; }
+  toast('Belum ada link atau foto untuk ini');
+}
+
+function openImageViewer(src,title){
+  const old=document.getElementById('imgViewerOverlay');
+  if(old) old.remove();
+  const div=document.createElement('div');
+  div.id='imgViewerOverlay';
+  div.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.92);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px';
+  div.innerHTML=`
+    <div style="position:absolute;top:16px;right:16px;display:flex;gap:10px">
+      <a href="${src}" download="${(title||'foto').replace(/[^a-zA-Z0-9]/g,'_')}.jpg" style="width:42px;height:42px;border-radius:12px;background:rgba(255,255,255,0.15);color:#fff;display:flex;align-items:center;justify-content:center;font-size:1.2rem;text-decoration:none">⬇️</a>
+      <button onclick="document.getElementById('imgViewerOverlay').remove()" style="width:42px;height:42px;border-radius:12px;background:rgba(255,255,255,0.15);color:#fff;border:none;font-size:1.3rem;cursor:pointer">✕</button>
+    </div>
+    ${title?`<div style="color:#fff;font-weight:700;font-size:0.95rem;margin-bottom:14px;text-align:center">${escapeHtml(title)}</div>`:''}
+    <img src="${src}" style="max-width:100%;max-height:80vh;border-radius:12px;object-fit:contain"/>
+  `;
+  div.addEventListener('click',e=>{ if(e.target===div) div.remove(); });
+  document.body.appendChild(div);
 }
 
 function escapeHtml(str){
