@@ -741,7 +741,47 @@ let calMonth=new Date().getMonth();
 let selectedCalDate=null;
 let quickLinks=[]; // {id,name,url} — tombol tautan kustom di tab Link
 
-// ── STORAGE ───────────────────────────────────────────
+// ── SHARE JADWAL ──────────────────────────────────────
+function shareJadwal(dayName, dateKey){
+  const dayS=getStudentsForDay(dayName, dateKey)
+    .filter(s=>!s._sameday_reschedule)
+    .sort((a,b)=>a.time.localeCompare(b.time));
+
+  if(!dayS.length){ toast('Tidak ada jadwal untuk hari ini'); return; }
+
+  const d=new Date(dateKey+'T00:00:00');
+  const dateLabel=d.toLocaleDateString('id-ID',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+
+  let text=`*${dateLabel}*\n`;
+  dayS.forEach(s=>{
+    const icon=ICONS[s.instrument]||'🎵';
+    const t1=(s.time||'').replace(':','.');
+    const t2=(s.time2||'').replace(':','.');
+    text+=`${t1}${t2?'-'+t2:''} ${s.name} ${icon}\n`;
+  });
+  text=text.trim();
+
+  if(navigator.share){
+    navigator.share({text}).catch(()=>{}); // user cancel tidak perlu fallback
+  } else {
+    shareTextFallbackCopy(text);
+  }
+}
+
+function shareTextFallbackCopy(text){
+  if(navigator.clipboard&&navigator.clipboard.writeText){
+    navigator.clipboard.writeText(text).then(()=>toast('✅ Jadwal tersalin! Paste di WhatsApp.')).catch(()=>legacyCopyText(text));
+  } else legacyCopyText(text);
+}
+
+function legacyCopyText(text){
+  const ta=document.createElement('textarea');
+  ta.value=text;ta.style.position='fixed';ta.style.opacity='0';
+  document.body.appendChild(ta);ta.select();
+  try{document.execCommand('copy');toast('✅ Jadwal tersalin! Paste di WhatsApp.');}
+  catch(e){toast('Gagal menyalin jadwal');}
+  document.body.removeChild(ta);
+}
 function save(){
   localStorage.setItem('rms4_s',JSON.stringify(students));
   localStorage.setItem('rms4_a',JSON.stringify(attendance));
@@ -1296,7 +1336,10 @@ function renderAbsensi(){
           <div class="list-title">${selectedDay}${isToday?' — Hari ini':' — '+getDateForDay(selectedDay)}</div>
           <div style="font-size:0.72rem;color:var(--muted);margin-top:2px;font-weight:500">${getDateForDay(selectedDay)}</div>
         </div>
-        <button class="add-btn" onclick="openAdd()">＋ Tambah</button>
+        <div style="display:flex;gap:8px">
+          <button onclick="shareJadwal('${selectedDay}','${dateKey}')" style="width:40px;height:40px;border-radius:12px;border:1.5px solid var(--border);background:var(--card);font-size:1.1rem;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0" title="Share Jadwal">📤</button>
+          <button class="add-btn" onclick="openAdd()">＋ Tambah</button>
+        </div>
       </div>
       ${cardsHtml}
     </div>`;
