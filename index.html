@@ -2083,8 +2083,6 @@ function renderStudentProfile(name, period){
             +'<div style="display:flex;gap:6px">'
             +'<button onclick="openTrackEditModal(\''+safeAttKey+'\',\''+( st||'hadir')+'\',\''+safeName2+'\',\''+safeDk+'\')" '
               +'style="width:28px;height:28px;border-radius:8px;border:1.5px solid var(--border);background:var(--bg);color:var(--muted);font-size:0.75rem;cursor:pointer;display:flex;align-items:center;justify-content:center">✏️</button>'
-            +'<button onclick="deleteAttendance(\''+safeAttKey+'\',\''+safeDk+'\')" '
-              +'style="width:28px;height:28px;border-radius:8px;border:1.5px solid rgba(220,38,38,0.25);background:#fff5f5;color:var(--alpa);font-size:0.75rem;cursor:pointer;display:flex;align-items:center;justify-content:center">🗑</button>'
             +'</div>'
           +'</div>'
           +(note.reason?'<div style="font-size:0.82rem;color:var(--text);background:#fffbeb;border-radius:9px;padding:8px 11px;margin-top:5px;border-left:3px solid var(--izin)">📋 '+note.reason+'</div>':'')
@@ -2408,7 +2406,6 @@ function buildDateDetail(dk){
           <button class="att-btn a-alpa ${status==='alpa'?'on':''}" onclick="openNoteModal('${safeKey}','alpa','${safeName}','${safeDk}');setTimeout(renderTrack,300)">✗</button>
           <button class="att-btn" onclick="openTrackEditModal('${safeKey}','${status||'hadir'}','${safeName}','${safeDk}')">✏️</button>
           ${s.sheetLink&&status!=='izin'?`<button class="att-btn sheet-btn-${sidx}" onclick="openSheetLinkByName('${safeName}','${safeDk}')" style="${localStorage.getItem('sheet_sent_'+safeDk+'_'+s.name.replace(/[^a-zA-Z0-9]/g,'_'))?'background:#eafaf1;border-color:rgba(29,158,78,0.4)':'background:var(--blue-bg);border-color:rgba(0,113,227,0.3)'}">${localStorage.getItem('sheet_sent_'+safeDk+'_'+s.name.replace(/[^a-zA-Z0-9]/g,'_'))?'✅':'📨'}</button>`:''}
-          ${status!=='belum'?`<button class="att-btn" onclick="deleteAttendance('${safeName}','${safeDk}')" style="border-color:rgba(220,38,38,0.25);background:#fff5f5;color:var(--alpa)">🗑</button>`:''}
         </div>`;
 
     // Tap kartu untuk expand/collapse tombol aksi (Hadir/Izin/Alpa/Kirim Link),
@@ -2849,8 +2846,6 @@ function renderHistoryDetail(){
         <div style="display:flex;gap:6px">
           <button onclick="openTrackEditModal('${safeName2}','${status}','${safeName2}','${safeDk}')"
             style="width:28px;height:28px;border-radius:8px;border:1.5px solid var(--border);background:var(--bg);color:var(--muted);font-size:0.8rem;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0">✏️</button>
-          <button onclick="deleteAttendance('${safeName2}','${safeDk}')"
-            style="width:28px;height:28px;border-radius:8px;border:1.5px solid rgba(220,38,38,0.25);background:#fff5f5;color:var(--alpa);font-size:0.8rem;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0">🗑</button>
         </div>
       </div>
       <div class="hist-entry-status">
