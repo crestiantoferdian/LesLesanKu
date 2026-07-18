@@ -807,6 +807,23 @@ function loadStorage(){
     }
   });
   if(migrated) save();
+
+  // Migrasi: beri ID stabil ke setiap "Tambahan Kelas" (extraDates), supaya
+  // menghapus satu entri tidak menggeser index entri lain dan merusak
+  // keterkaitan dengan data absensi yang sudah tersimpan (bug lama).
+  // PENTING: id dibekukan dari index SAAT INI, supaya kunci yang dihasilkan
+  // (name+'_extra_'+id) identik dengan kunci lama yang sudah tersimpan —
+  // tidak ada data yang terputus akibat migrasi ini.
+  let idMigrated=false;
+  students.forEach(function(s){
+    if(s.extraDates&&s.extraDates.length){
+      s.extraDates.forEach(function(ed,ei){
+        if(ed.id===undefined||ed.id===null){ ed.id=ei; idMigrated=true; }
+      });
+    }
+  });
+  if(idMigrated) save();
+
   applySettings();
 }
 
@@ -1490,7 +1507,7 @@ function getStudentsForDay(dayName, dateKey, includeInactive){
         // Hanya tampilkan pada tab hari yang benar DAN tanggal yang tepat
         if(edDayName!==dayName) return;
         if(ed.date!==dateKey) return; // harus persis tanggal yang sedang dilihat
-        const extraAttKey=s.name+'_extra_'+ei;
+        const extraAttKey=s.name+'_extra_'+(ed.id!==undefined&&ed.id!==null?ed.id:ei);
         result.push(Object.assign({},s,{
           time:ed.time||s.time,
           time2:ed.time2||s.time2,
@@ -2006,7 +2023,8 @@ function renderStudentProfile(name, period){
   const extraCount = (s.extraDates||[]).length;
   const hasExtraOnDate = (dk)=>{
     for(let ei=0; ei<extraCount; ei++){
-      const ek=name+'_extra_'+ei;
+      const ed=s.extraDates[ei];
+      const ek=name+'_extra_'+(ed.id!==undefined&&ed.id!==null?ed.id:ei);
       if(attendance[dk]&&(attendance[dk][ek]||attNotes[dk+'_'+ek])) return true;
     }
     return false;
@@ -2022,7 +2040,8 @@ function renderStudentProfile(name, period){
     if(!attendance[dk]) return null;
     if(attendance[dk][name]) return attendance[dk][name];
     for(let ei=0; ei<extraCount; ei++){
-      const ek=name+'_extra_'+ei;
+      const ed=s.extraDates[ei];
+      const ek=name+'_extra_'+(ed.id!==undefined&&ed.id!==null?ed.id:ei);
       if(attendance[dk][ek]) return attendance[dk][ek];
     }
     return null;
@@ -2059,7 +2078,8 @@ function renderStudentProfile(name, period){
         // Jika sesi reguler kosong, cek sesi tambahan (extra) di tanggal ini
         if(!st&&!note.progress&&!note.reason){
           for(let ei=0; ei<extraCount; ei++){
-            const ek=name+'_extra_'+ei;
+            const ed=s.extraDates[ei];
+            const ek=name+'_extra_'+(ed.id!==undefined&&ed.id!==null?ed.id:ei);
             const est=(attendance[dk]||{})[ek];
             const enote=attNotes[dk+'_'+ek]||{};
             if(est||enote.progress||enote.reason){
@@ -2662,7 +2682,7 @@ function calcTrackTotals(monthOverride){
       // Sesi extra (key: name_extra_N)
       if(s.extraDates) s.extraDates.forEach((ed,ei)=>{
         if(ed.date!==dk) return;
-        const est=dayAtt[s.name+'_extra_'+ei];
+        const est=dayAtt[s.name+'_extra_'+(ed.id!==undefined&&ed.id!==null?ed.id:ei)];
         if(est==='hadir'){ totalHadir++; totalPenghasilan+=rate; }
         else if(est==='izin'){ totalIzin++; }
         else if(est==='alpa'){ totalAlpa++; totalPenghasilan+=rate; }
@@ -2736,7 +2756,7 @@ function buildTrackCards(){
       // Extra sessions (Tambahan Kelas)
       if(s.extraDates) s.extraDates.forEach((ed,ei)=>{
         if(ed.date!==dk) return;
-        const extraAttKey=s.name+'_extra_'+ei;
+        const extraAttKey=s.name+'_extra_'+(ed.id!==undefined&&ed.id!==null?ed.id:ei);
         const est=dayAtt[extraAttKey];
         if(est==='hadir') hadir++;
         else if(est==='izin') izin++;
@@ -3823,11 +3843,16 @@ function closeModal(){
 
 // Extra dates management
 function addExtraDate(){
-  extraDates.push({date:'',time:'',time2:'',attended:false});
+  extraDates.push({id:'ex_'+Date.now()+'_'+Math.random().toString(36).slice(2,7),date:'',time:'',time2:'',attended:false});
   renderExtraDates();
 }
 
 function removeExtraDate(i){
+  const ed=extraDates[i];
+  if(ed&&ed.date&&ed.date<todayStr()){
+    toast('🔒 Sesi yang sudah lewat tidak bisa dihapus, hanya bisa diedit');
+    return;
+  }
   extraDates.splice(i,1);
   renderExtraDates();
 }
@@ -3839,10 +3864,24 @@ function renderExtraDates(){
     wrap.innerHTML='<div style="font-size:0.75rem;color:var(--muted);text-align:center;padding:8px">Belum ada tanggal tambahan</div>';
     return;
   }
-  wrap.innerHTML=extraDates.map((ed,i)=>`
+  const today=todayStr();
+  // Sesi yang tanggalnya sudah lewat disembunyikan total dari sini (riwayatnya
+  // tetap aman & tetap bisa dilihat lewat tab Track/Kalender, hanya tidak
+  // ditampilkan/dikelola lagi di form edit siswa ini).
+  const visibleIdx=[];
+  extraDates.forEach((ed,i)=>{ if(!(ed.date&&ed.date<today)) visibleIdx.push(i); });
+
+  if(!visibleIdx.length){
+    wrap.innerHTML='<div style="font-size:0.75rem;color:var(--muted);text-align:center;padding:8px">Tidak ada tanggal tambahan yang akan datang</div>';
+    return;
+  }
+
+  wrap.innerHTML=visibleIdx.map((i,n)=>{
+    const ed=extraDates[i];
+    return `
     <div style="background:var(--bg);border:1.5px solid var(--border);border-radius:12px;padding:10px;margin-bottom:2px">
       <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
-        <span style="font-size:0.72rem;font-weight:700;color:var(--blue)">📅 Sesi ${i+1}</span>
+        <span style="font-size:0.72rem;font-weight:700;color:var(--blue)">📅 Sesi ${n+1}</span>
         <button type="button" onclick="removeExtraDate(${i})"
           style="margin-left:auto;background:#fff0ee;color:var(--alpa);border:1px solid rgba(192,57,43,0.2);
           border-radius:8px;padding:3px 10px;cursor:pointer;font-size:0.75rem;font-weight:700">✕ Hapus</button>
@@ -3867,7 +3906,8 @@ function renderExtraDates(){
             font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:0.78rem;padding:7px 8px;border-radius:8px;outline:none"/>
         </div>
       </div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 }
 
 function doSave(){
@@ -4439,8 +4479,8 @@ function renderFormRescheduleList(s){
 function deleteAttendance(name, dk){
   history.pushState({tab:currentTab, view:'modal'},'');
   window._pendingDelete = {name, dk};
-  // Tampilkan nama bersih (tanpa _extra_N)
-  const displayName = name.replace(/_extra_\d+$/, '');
+  // Tampilkan nama bersih (tanpa _extra_<id>)
+  const displayName = name.replace(/_extra_.+$/, '');
   document.getElementById('deleteConfirmName').textContent = displayName;
   document.getElementById('deleteConfirmDate').textContent = fmtPretty(dk);
   document.getElementById('deleteConfirmOverlay').classList.add('open');
