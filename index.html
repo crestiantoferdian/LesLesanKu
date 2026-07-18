@@ -2360,6 +2360,36 @@ function buildDateDetail(dk){
   const isPast=dk<todayStr();
   const scheduled=getStudentsForDay(dayName, dk, isPast).sort((a,b)=>a.time.localeCompare(b.time));
 
+  // ── Pulihkan riwayat "yatim" ──────────────────────────
+  // Kalau jadwal (hari kedua/reschedule/tambahan kelas) sudah diubah/dihapus
+  // SETELAH absensi tercatat, siswa itu tidak lagi "ketemu" oleh getStudentsForDay
+  // di atas — padahal datanya masih ada di attendance[]. Supaya riwayat tidak
+  // pernah hilang dari Kalender, cari data yang sudah punya status nyata
+  // (bukan 'belum') tapi belum tercakup di atas, lalu tampilkan juga.
+  const coveredKeys=new Set(scheduled.map(x=>x._attKey||x.name));
+  students.forEach(s=>{
+    const regStatus=dayAtt[s.name];
+    if(regStatus&&regStatus!=='belum'&&!coveredKeys.has(s.name)){
+      coveredKeys.add(s.name);
+      scheduled.push(Object.assign({},s,{
+        time:s.time||'00:00',_originalIdx:students.indexOf(s),
+        _isRescheduled:false,_isExtra:false,_isOrphaned:true
+      }));
+    }
+    Object.keys(dayAtt).forEach(k=>{
+      if(!k.startsWith(s.name+'_extra_')) return;
+      if(coveredKeys.has(k)) return;
+      const est=dayAtt[k];
+      if(!est||est==='belum') return;
+      coveredKeys.add(k);
+      scheduled.push(Object.assign({},s,{
+        time:s.time||'00:00',_originalIdx:students.indexOf(s),
+        _attKey:k,_extraDate:dk,_isExtra:true,_isOrphaned:true
+      }));
+    });
+  });
+  scheduled.sort((a,b)=>a.time.localeCompare(b.time));
+
   if(!scheduled.length){
     return `<div class="date-detail">
       <div class="date-detail-header">
@@ -2418,6 +2448,7 @@ function buildDateDetail(dk){
     if(status==='hadir'&&note.progress) noteHtml=`<div style="font-size:0.7rem;color:var(--hadir);margin-top:3px">📝 ${note.progress}</div>`;
     if(status==='alpa'&&note.reason) noteHtml=`<div style="font-size:0.7rem;color:var(--alpa);margin-top:3px">✗ ${note.reason}</div>`;
     if(status==='izin') noteHtml=`<div style="font-size:0.72rem;color:#d97706;font-weight:600;margin-top:3px">✋ Izin${note.reason?' · '+note.reason:''}</div>`;
+    if(s._isOrphaned) noteHtml+=`<div style="font-size:0.68rem;color:var(--muted);margin-top:3px">📌 Jadwal sesi ini sudah diubah/dihapus — riwayatnya tetap dijaga di sini</div>`;
 
     const attBtns=`
         <div class="att-btns" onclick="event.stopPropagation()" style="margin-top:8px">
@@ -2673,16 +2704,34 @@ function calcTrackTotals(monthOverride){
       const isDay3=s.day3&&s.day3===dayName;
       const isDay4=s.day4&&s.day4===dayName;
       const isRescheduleDate2=(s.reschedules||[]).some(r=>r.date===dk);
-      if(dayName!==s.day&&!hasExtra&&!isDay2&&!isDay3&&!isDay4&&!isRescheduleDate2) return;
+      // Sesi "yatim": jadwalnya sudah diubah/dihapus tapi datanya masih nyata —
+      // tetap dihitung supaya total tidak diam-diam berkurang.
+      const hasRecordedData2=(dayAtt[s.name]&&dayAtt[s.name]!=='belum')
+        ||Object.keys(dayAtt).some(k=>k.startsWith(s.name+'_extra_')&&dayAtt[k]&&dayAtt[k]!=='belum');
+      if(dayName!==s.day&&!hasExtra&&!isDay2&&!isDay3&&!isDay4&&!isRescheduleDate2&&!hasRecordedData2) return;
       // Sesi reguler
       const st=dayAtt[s.name];
       if(st==='hadir'){ totalHadir++; totalPenghasilan+=rate; }
       else if(st==='izin'){ totalIzin++; }
       else if(st==='alpa'){ totalAlpa++; totalPenghasilan+=rate; }
       // Sesi extra (key: name_extra_N)
+      const coveredExtraIds2=new Set();
       if(s.extraDates) s.extraDates.forEach((ed,ei)=>{
         if(ed.date!==dk) return;
-        const est=dayAtt[s.name+'_extra_'+(ed.id!==undefined&&ed.id!==null?ed.id:ei)];
+        const eid=ed.id!==undefined&&ed.id!==null?ed.id:ei;
+        coveredExtraIds2.add(String(eid));
+        const est=dayAtt[s.name+'_extra_'+eid];
+        if(est==='hadir'){ totalHadir++; totalPenghasilan+=rate; }
+        else if(est==='izin'){ totalIzin++; }
+        else if(est==='alpa'){ totalAlpa++; totalPenghasilan+=rate; }
+      });
+      // Sesi extra "yatim": jadwalnya sudah dihapus dari extraDates, tapi datanya
+      // masih ada di attendance[] — tetap dihitung supaya tidak hilang diam-diam.
+      Object.keys(dayAtt).forEach(k=>{
+        if(!k.startsWith(s.name+'_extra_')) return;
+        const eid=k.slice((s.name+'_extra_').length);
+        if(coveredExtraIds2.has(eid)) return;
+        const est=dayAtt[k];
         if(est==='hadir'){ totalHadir++; totalPenghasilan+=rate; }
         else if(est==='izin'){ totalIzin++; }
         else if(est==='alpa'){ totalAlpa++; totalPenghasilan+=rate; }
@@ -2740,7 +2789,11 @@ function buildTrackCards(){
       const isDay3=s.day3&&s.day3===dayName;
       const isDay4=s.day4&&s.day4===dayName;
       const isRescheduleDate=(s.reschedules||[]).some(r=>r.date===dk);
-      if(dayName!==s.day&&!hasExtra&&!isDay2&&!isDay3&&!isDay4&&!isRescheduleDate) return;
+      // Sesi "yatim": jadwalnya sudah diubah/dihapus tapi datanya masih nyata —
+      // tetap dihitung supaya total tidak diam-diam berkurang.
+      const hasRecordedData=(dayAtt[s.name]&&dayAtt[s.name]!=='belum')
+        ||Object.keys(dayAtt).some(k=>k.startsWith(s.name+'_extra_')&&dayAtt[k]&&dayAtt[k]!=='belum');
+      if(dayName!==s.day&&!hasExtra&&!isDay2&&!isDay3&&!isDay4&&!isRescheduleDate&&!hasRecordedData) return;
       // Jam yang sesuai jadwal hari yang cocok (hari ke-2/3/4 punya jam sendiri)
       const scheduledTime=isDay2?(s.time2a||s.time):isDay3?(s.time3a||s.time):isDay4?(s.time4a||s.time):s.time;
       const st=dayAtt[s.name];
@@ -2754,15 +2807,33 @@ function buildTrackCards(){
         if(ts>lastActivityTs) lastActivityTs=ts;
       }
       // Extra sessions (Tambahan Kelas)
+      const coveredExtraIds=new Set();
       if(s.extraDates) s.extraDates.forEach((ed,ei)=>{
         if(ed.date!==dk) return;
-        const extraAttKey=s.name+'_extra_'+(ed.id!==undefined&&ed.id!==null?ed.id:ei);
+        const eid=ed.id!==undefined&&ed.id!==null?ed.id:ei;
+        coveredExtraIds.add(String(eid));
+        const extraAttKey=s.name+'_extra_'+eid;
         const est=dayAtt[extraAttKey];
         if(est==='hadir') hadir++;
         else if(est==='izin') izin++;
         else if(est==='alpa') alpa++;
         if(est==='hadir'||est==='alpa'){
           const ts=scheduleTs(dk,ed.time||s.time);
+          if(ts>lastActivityTs) lastActivityTs=ts;
+        }
+      });
+      // Sesi extra "yatim": jadwal aslinya sudah dihapus dari extraDates, tapi
+      // datanya masih ada — tetap dihitung supaya tidak hilang diam-diam.
+      Object.keys(dayAtt).forEach(k=>{
+        if(!k.startsWith(s.name+'_extra_')) return;
+        const eid=k.slice((s.name+'_extra_').length);
+        if(coveredExtraIds.has(eid)) return;
+        const est=dayAtt[k];
+        if(est==='hadir') hadir++;
+        else if(est==='izin') izin++;
+        else if(est==='alpa') alpa++;
+        if(est==='hadir'||est==='alpa'){
+          const ts=scheduleTs(dk,s.time);
           if(ts>lastActivityTs) lastActivityTs=ts;
         }
       });
