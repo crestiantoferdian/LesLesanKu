@@ -501,14 +501,14 @@ body{
     <div style="padding:12px 0 4px;border-top:1px dashed var(--border);margin-top:6px">
       <button type="button" onclick="toggleJadwal(1)" id="jadwal-header-1"
         style="width:100%;display:flex;align-items:center;justify-content:space-between;background:var(--blue-bg);border:1.5px solid rgba(0,113,227,0.2);border-radius:10px;padding:10px 13px;cursor:pointer;margin-bottom:0">
-        <span style="font-size:0.72rem;font-weight:700;color:var(--blue);text-transform:uppercase;letter-spacing:0.06em">📅 Jadwal Rutin Harian 1 <span style="font-size:0.65rem;font-weight:500;opacity:0.7">(wajib)</span></span>
+        <span style="font-size:0.72rem;font-weight:700;color:var(--blue);text-transform:uppercase;letter-spacing:0.06em">📅 Jadwal Rutin Harian 1 <span style="font-size:0.65rem;font-weight:500;opacity:0.7">(opsional)</span></span>
         <span id="jadwal-arrow-1" style="font-size:0.8rem;color:var(--blue);transition:transform 0.2s">▼</span>
       </button>
       <div id="jadwal-body-1" style="margin-top:8px">
         <div class="mrow">
-          <div class="mfield"><label>Hari *</label>
+          <div class="mfield"><label>Hari</label>
             <select id="f_day">
-              <option value="">Pilih...</option>
+              <option value="">Tidak ada</option>
               <option>Senin</option><option>Selasa</option><option>Rabu</option>
               <option>Kamis</option><option>Jumat</option><option>Sabtu</option><option>Minggu</option>
             </select>
@@ -4010,7 +4010,7 @@ function doSave(){
     sheetLink:document.getElementById('f_sheet_link').value.trim(),
   };
   if(!s.name){toast('❌ Nama wajib diisi!');return}
-  if(!s.day){toast('❌ Pilih hari!');return}
+  if(!s.day&&!s.extraDates.length){toast('❌ Isi jadwal rutin, atau tambahkan minimal 1 tanggal di "Tambahan Kelas"');return}
   if(editIdx!==null){
     // Preserve lastPaidAt agar siklus bayar tidak hilang saat edit
     if(students[editIdx].lastPaidAt) s.lastPaidAt=students[editIdx].lastPaidAt;
