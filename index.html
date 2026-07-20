@@ -1528,14 +1528,15 @@ function getStudentsForDay(dayName, dateKey, includeInactive){
 
 // Count total hadir sessions for a student
 function countSessions(name){
-  // Total hadir sejak awal (untuk Track Record - tidak pernah direset)
+  // Total sesi terhitung untuk pembayaran sejak awal (Hadir + Alpa — Alpa tetap
+  // dihitung 1x karena jadwal sudah terpakai, konsisten dengan estimasi penghasilan)
   let count=0;
   Object.values(attendance).forEach(dayAtt=>{
     // Hitung sesi reguler
-    if(dayAtt[name]==='hadir') count++;
+    if(dayAtt[name]==='hadir'||dayAtt[name]==='alpa') count++;
     // Hitung sesi tambahan (key: name_extra_N)
     Object.keys(dayAtt).forEach(k=>{
-      if(k.startsWith(name+'_extra_')&&dayAtt[k]==='hadir') count++;
+      if(k.startsWith(name+'_extra_')&&(dayAtt[k]==='hadir'||dayAtt[k]==='alpa')) count++;
     });
   });
   const s=students.find(x=>x.name===name);
@@ -2957,7 +2958,7 @@ function renderHistoryDetail(){
         <div class="track-avatar" style="width:48px;height:48px;font-size:1.4rem">${icon}</div>
         <div>
           <div style="font-size:1.1rem;font-weight:800">${name}</div>
-          <div style="font-size:0.78rem;color:var(--muted)">${s.instrument||''} · ${s.day} ${s.time||''} · Total ${total}x hadir</div>
+          <div style="font-size:0.78rem;color:var(--muted)">${s.instrument||''} · ${s.day} ${s.time||''} · Total ${total}x pertemuan</div>
         </div>
       </div>
     </div>
@@ -3471,7 +3472,7 @@ function showAllStudents(){
       <div class="s-avatar" style="width:36px;height:36px;font-size:1rem">${icon}</div>
       <div class="menu-text">
         <div class="menu-label">${s.name}</div>
-        <div class="menu-desc">${s.day} ${s.time}${s.time2?'–'+s.time2:''} · ${s.instrument||''} · ${total}x hadir</div>
+        <div class="menu-desc">${s.day} ${s.time}${s.time2?'–'+s.time2:''} · ${s.instrument||''} · ${total}x pertemuan</div>
       </div><span class="menu-arrow">›</span>
     </div>`;
   }).join(''):`<div class="empty"><div class="empty-icon">🎵</div><div class="empty-t">Belum ada murid</div></div>`;
