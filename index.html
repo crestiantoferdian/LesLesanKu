@@ -1324,8 +1324,7 @@ function renderAbsensi(){
               : `<button class="att-btn a-hadir ${status==='hadir'?'on':''}" onclick="openNoteModal('${attKey}','hadir','${s.name}','${attDateKey}')">✅</button>
             <button class="att-btn a-izin ${status==='izin'?'on':''}" onclick="openNoteModal('${attKey}','izin','${s.name}','${attDateKey}')">✋</button>
             <button class="att-btn a-alpa ${status==='alpa'?'on':''}" onclick="openNoteModal('${attKey}','alpa','${s.name}','${attDateKey}')">✗</button>
-            <button class="att-btn" onclick="openRescheduleModal('${s.name}','${s.day}',${sidx});event.stopPropagation()" title="Reschedule" style="${(s._hasActiveReschedule||s._isRescheduled)?'background:#fef3c7;border-color:#f59e0b;color:#d97706;font-weight:700':''}">🔄</button>
-            <button class="att-btn" onclick="openEdit(${sidx});event.stopPropagation()">✏️</button>`
+            <button class="att-btn" onclick="openRescheduleModal('${s.name}','${s.day}',${sidx});event.stopPropagation()" title="Reschedule" style="${(s._hasActiveReschedule||s._isRescheduled)?'background:#fef3c7;border-color:#f59e0b;color:#d97706;font-weight:700':''}">🔄</button>`
             }
             ${s.sheetLink&&status!=='izin'?`<button class="att-btn sheet-btn-${sidx}" onclick="openSheetLinkByName('${s.name.replace(/'/g,"\'")}','${attDateKey}')" style="${localStorage.getItem('sheet_sent_'+attDateKey+'_'+s.name.replace(/[^a-zA-Z0-9]/g,'_'))?'background:#eafaf1;border-color:rgba(29,158,78,0.4)':'background:var(--blue-bg);border-color:rgba(0,113,227,0.3)'}">
               ${localStorage.getItem('sheet_sent_'+attDateKey+'_'+s.name.replace(/[^a-zA-Z0-9]/g,'_'))?'✅':'📨'}
