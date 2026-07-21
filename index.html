@@ -897,22 +897,18 @@ function checkNotifications(){
   const now=new Date();
   const todayName=todayDayName();
   const dateKey=todayStr();
-  students.forEach(s=>{
-    // Effective day/time (reschedule?)
-    let effectiveDay=s.day, effectiveTime=s.time;
-    if(s.rescueUntil && s.rescueUntil===dateKey){
-      // Ambil nama hari dari tanggal reschedule
-      if(s.rescueUntil){
-        const rd=new Date(s.rescueUntil+'T00:00:00');
-        effectiveDay=DAYS[DAYS_JS.indexOf(rd.getDay())]||s.day;
-      } else { effectiveDay=s.day; }
-      effectiveTime=s.rescueTime||s.time;
-    }
-    if(effectiveDay!==todayName) return;
-    const [h,m]=(effectiveTime||'00:00').split(':').map(Number);
+
+  // Pakai getStudentsForDay — sumber jadwal yang SAMA dengan tab Absensi —
+  // supaya otomatis mengenali siswa nonaktif (dilewati), Tambahan Kelas,
+  // hari kedua/ketiga/keempat, dan reschedule terbaru dengan benar.
+  const todayS=getStudentsForDay(todayName, dateKey).filter(s=>!s._sameday_reschedule);
+  todayS.forEach(s=>{
+    const effectiveTime=s.time||'00:00';
+    const [h,m]=effectiveTime.split(':').map(Number);
     const lessonTime=new Date(now.getFullYear(),now.getMonth(),now.getDate(),h,m);
     const diff=lessonTime-now;
-    const key=dateKey+'_'+s.name;
+    // Kunci unik per sesi (termasuk sesi tambahan) supaya tidak bentrok/kelewat
+    const key=dateKey+'_'+(s._attKey||s.name);
     if(diff>0 && diff<=5*60*1000 && !notifShown[key]){
       notifShown[key]=true;
       showNotif(`🎵 ${s.name} dalam 5 menit!`,`${effectiveTime} · ${s.instrument||'LesLesanKu'}`);
