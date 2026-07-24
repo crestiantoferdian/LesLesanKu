@@ -740,6 +740,7 @@ let calYear=new Date().getFullYear();
 let calMonth=new Date().getMonth();
 let selectedCalDate=null;
 let quickLinks=[]; // {id,name,url} — tombol tautan kustom di tab Link
+let paymentMode=localStorage.getItem('llk_payment_mode')||'session'; // 'session' | 'monthly' | 'off'
 
 // ── SHARE JADWAL ──────────────────────────────────────
 function shareJadwal(dayName, dateKey){
@@ -847,6 +848,7 @@ function hexToRgba(hex, alpha){
 }
 
 function applySettings(){
+  paymentMode=localStorage.getItem('llk_payment_mode')||'session';
   const name=localStorage.getItem('rms_school_name')||'LesLesanKu';
   const sub=localStorage.getItem('rms_school_sub')||'Aplikasi Manajemen Les';
   const logo=localStorage.getItem('rms_school_logo')||'LLK';
@@ -1251,8 +1253,11 @@ function renderAbsensi(){
     // Gunakan jam reschedule jika ada, bukan jam asli
     const timeRange=s.time+(s.time2?'–'+s.time2:'');
     // Payment warning
-    const totalSessions=countSessionsForBilling(s.name);
-    const showPayWarn=totalSessions>0&&totalSessions%(s.payCycle||4)===0&&isToday;
+    const payDue=computeIsDue(s);
+    const showPayWarn=paymentMode!=='off'&&payDue.isDue&&isToday;
+    const payWarnLabel=paymentMode==='monthly'
+      ?`💳 Waktunya bayar (akhir bulan) — Ingatkan bayar via WA`
+      :`💳 ${payDue.total}x pertemuan — Ingatkan bayar via WA`;
     // Reschedule badges
     const isRescued=s._isRescheduled||false;
     // Murid tampil di hari rutin tapi ada reschedule aktif ke hari lain
@@ -1313,7 +1318,7 @@ function renderAbsensi(){
           ${s._isExtra?`<span class="s-pill" style="background:#eef2ff;color:var(--blue);border-color:rgba(37,99,235,0.3)">➕ ${s._extraNote||'Tambahan Kelas'}</span>`:''}
         </div>
         ${note.progress?`<div class="s-note-preview">📝 ${note.progress}</div>`:''}
-        ${showPayWarn?`<div class="pay-warn" onclick="sendPaymentWA('${s.name}')">💳 ${totalSessions}x pertemuan — Ingatkan bayar via WA</div>`:''}
+        ${showPayWarn?`<div class="pay-warn" onclick="sendPaymentWA('${s.name}')">${payWarnLabel}</div>`:''}
         <div class="att-btns" onclick="event.stopPropagation()">
             ${samedayRs
               ? `<div style="font-size:0.75rem;color:#7c3aed;font-weight:600;padding:6px 8px;background:#f5f3ff;border-radius:8px;border:1.5px solid #ddd6fe">🔒 Jadwal dipindah ke jam ${samedayRs.time}${samedayRs.time2?'–'+samedayRs.time2:''}</div>`
@@ -1548,12 +1553,70 @@ function countSessionsForBilling(name){
   return total-lastPaid;
 }
 
-// WA payment reminder
+// ── PAYMENT REMINDER MODE ─────────────────────────────
+// 'session' = ingatkan tiap kelipatan sesi yang disepakati (default/lama)
+// 'monthly' = ingatkan semua siswa aktif di akhir bulan
+// 'off'     = matikan semua pengingat pembayaran
+function getMonthKey(d){ d=d||new Date(); return d.getFullYear()+'-'+pad(d.getMonth()+1); }
+function isEndOfMonthWindow(){
+  const d=new Date();
+  const daysInM=new Date(d.getFullYear(), d.getMonth()+1, 0).getDate();
+  return d.getDate()>=daysInM-2; // 3 hari terakhir bulan berjalan
+}
+function computeIsDue(s){
+  const total=countSessionsForBilling(s.name);
+  const cycle=s.payCycle||4;
+  let isDue=false;
+  if(paymentMode==='session'){
+    isDue=total>0&&total%cycle===0;
+  }else if(paymentMode==='monthly'){
+    isDue=isEndOfMonthWindow()&&s.monthlyPaidThru!==getMonthKey();
+  }
+  return {total,cycle,isDue};
+}
+function setPaymentMode(mode){
+  paymentMode=mode;
+  localStorage.setItem('llk_payment_mode',mode);
+  renderPaymentSettings();
+  toast('✅ Mode pengingat pembayaran diubah');
+}
+
+// ── TEMPLATE PESAN PENAGIHAN KE SISWA ─────────────────
+const DEFAULT_TPL_SESSION='Halo {nama}! 😊\nMengingatkan bahwa sudah {sesi}x pertemuan les di sini.\nMohon segera melakukan pembayaran ya. Terima kasih! 🎵';
+const DEFAULT_TPL_MONTHLY='Halo {nama}! 😊\nMengingatkan pembayaran les bulan {bulan} ya.\nSudah {sesi}x pertemuan bulan ini.\nMohon segera melakukan pembayaran. Terima kasih! 🎵';
+function getMonthNameID(d){ return (d||new Date()).toLocaleDateString('id-ID',{month:'long'}); }
+function getPaymentTemplate(mode){
+  const key=mode==='monthly'?'llk_tpl_monthly':'llk_tpl_session';
+  const def=mode==='monthly'?DEFAULT_TPL_MONTHLY:DEFAULT_TPL_SESSION;
+  return localStorage.getItem(key)||def;
+}
+function fillTemplate(tpl,vars){
+  return tpl.replace(/\{(\w+)\}/g,(m,k)=>(vars[k]!==undefined?vars[k]:m));
+}
+function savePaymentTemplate(mode){
+  const id=mode==='monthly'?'tplMonthlyInput':'tplSessionInput';
+  const key=mode==='monthly'?'llk_tpl_monthly':'llk_tpl_session';
+  const val=document.getElementById(id).value.trim();
+  const def=mode==='monthly'?DEFAULT_TPL_MONTHLY:DEFAULT_TPL_SESSION;
+  localStorage.setItem(key,val||def);
+  toast('✅ Template pesan disimpan');
+}
+function resetPaymentTemplate(mode){
+  const key=mode==='monthly'?'llk_tpl_monthly':'llk_tpl_session';
+  localStorage.removeItem(key);
+  renderPaymentSettings();
+  toast('↩️ Template dikembalikan ke default');
+}
+
+// WA payment reminder — ke siswa langsung, pakai template yang bisa dikustom
 function sendPaymentWA(name){
   const s=students.find(x=>x.name===name)||{};
   const phone=(s.phone||'').replace(/\D/g,'');
   const total=countSessions(name);
-  const msg=encodeURIComponent(`Halo ${name}! 😊\nMengingatkan bahwa sudah ${total}x pertemuan les di sini.\nMohon segera melakukan pembayaran ya. Terima kasih! 🎵`);
+  const mode=paymentMode==='monthly'?'monthly':'session';
+  const tpl=getPaymentTemplate(mode);
+  const msgText=fillTemplate(tpl,{nama:name,sesi:total,siklus:s.payCycle||4,bulan:getMonthNameID()});
+  const msg=encodeURIComponent(msgText);
   if(phone) window.open(`https://wa.me/62${phone.replace(/^0/,'')}?text=${msg}`,'_blank');
   else toast('❌ Nomor WA tidak ada — cek data murid');
 }
@@ -1789,8 +1852,12 @@ function confirmMarkPaid(btn, studentName){
   // Confirmed — reset cycle
   const idx = students.findIndex(x => x.name === studentName);
   if(idx !== -1){
-    const totalNow = countSessions(studentName);
-    students[idx].lastPaidAt = totalNow;
+    if(paymentMode==='monthly'){
+      students[idx].monthlyPaidThru = getMonthKey();
+    }else{
+      const totalNow = countSessions(studentName);
+      students[idx].lastPaidAt = totalNow;
+    }
     save();
     render();
     toast('✅ Pembayaran ' + studentName + ' dicatat, siklus direset!');
@@ -1817,10 +1884,12 @@ function siswaCardHtml(s,total,cycle,isDue){
       return ih;
     }
 
+    const paymentOff=paymentMode==='off';
+    const isMonthly=paymentMode==='monthly';
     const sessInCycle=total%cycle;
     const remaining=isDue?0:cycle-sessInCycle;
     const adminWa=(s.adminWa||adminWaNumber||'').replace(/\D/g,'').replace(/^0/,'');
-    const waText='Halo Admin\nMohon diingatkan pembayaran:\nNama: '+s.name+'\nInstrumen: '+(s.instrument||'-')+'\nJadwal: '+s.day+' '+s.time+(s.time2?'-'+s.time2:'')+(s.day2?' & '+s.day2+' '+s.time2b+(s.time2c?'-'+s.time2c:''):'')+'\nTotal: '+total+'x (siklus '+cycle+'x)\nTerima kasih!';
+    const waText='Halo Admin\nMohon diingatkan pembayaran:\nNama: '+s.name+'\nInstrumen: '+(s.instrument||'-')+'\nJadwal: '+s.day+' '+s.time+(s.time2?'-'+s.time2:'')+(s.day2?' & '+s.day2+' '+s.time2b+(s.time2c?'-'+s.time2c:''):'')+'\nTotal: '+total+'x'+(isMonthly?' (tagihan akhir bulan)':' (siklus '+cycle+'x)')+'\nTerima kasih!';
     const waLink=adminWa?'https://wa.me/62'+adminWa+'?text='+encodeURIComponent(waText):'';
 
     const borderColor=isDue?'rgba(192,57,43,0.4)':'var(--border)';
@@ -1828,7 +1897,9 @@ function siswaCardHtml(s,total,cycle,isDue){
     const pillBg=isDue?'#fff0ee':'#eafaf1';
     const pillColor=isDue?'var(--alpa)':'var(--hadir)';
     const pillBorder=isDue?'rgba(192,57,43,0.3)':'rgba(45,138,94,0.3)';
-    const pillText=isDue?('💳 Waktunya Bayar! ('+total+'x)'):('✅ '+sessInCycle+'/'+cycle+'x · '+remaining+'x lagi');
+    const pillText=isMonthly
+      ?(isDue?('💳 Waktunya Bayar! (Akhir Bulan · '+total+'x)'):'📅 Ditagih akhir bulan')
+      :(isDue?('💳 Waktunya Bayar! ('+total+'x)'):('✅ '+sessInCycle+'/'+cycle+'x · '+remaining+'x lagi'));
 
     let html='<div style="background:'+bgColor+';border:1px solid '+borderColor+';border-radius:14px;padding:14px;margin-bottom:8px">';
     html+='<div style="display:flex;align-items:center;gap:10px;cursor:pointer" onclick="openStudentReport(\''+safeName+'\')">';
@@ -1836,11 +1907,13 @@ function siswaCardHtml(s,total,cycle,isDue){
     html+='<div style="flex:1;min-width:0">';
     html+='<div style="font-weight:800;font-size:0.95rem">'+s.name+'</div>';
     html+='<div style="font-size:0.75rem;color:var(--muted);margin-top:1px">'+s.day+' '+s.time+(s.time2?'–'+s.time2:'')+(s.day2?' & '+s.day2+' '+s.time2a+(s.time2b?'–'+s.time2b:''):'')+(s.day3?' & '+s.day3+' '+s.time3a+(s.time3b?'–'+s.time3b:''):'')+(s.day4?' & '+s.day4+' '+s.time4a+(s.time4b?'–'+s.time4b:''):'')+(s.instrument?' · '+s.instrument:'')+'</div>';
-    html+='<div style="margin-top:5px"><span style="display:inline-block;padding:2px 9px;border-radius:20px;font-size:0.68rem;font-weight:700;background:'+pillBg+';color:'+pillColor+';border:1px solid '+pillBorder+'">'+pillText+'</span></div>';
+    if(!paymentOff){
+      html+='<div style="margin-top:5px"><span style="display:inline-block;padding:2px 9px;border-radius:20px;font-size:0.68rem;font-weight:700;background:'+pillBg+';color:'+pillColor+';border:1px solid '+pillBorder+'">'+pillText+'</span></div>';
+    }
     html+='</div>';
     html+='<span style="color:var(--muted)">›</span>';
     html+='</div>';
-    if(isDue){
+    if(isDue&&!paymentOff){
       html+='<div style="display:flex;gap:8px;margin-top:10px">';
       if(waLink){
         html+='<button onclick="openWaLink(\''+waLink+'\')" style="flex:1;padding:11px;background:#25d366;color:#fff;border:none;border-radius:11px;font-family:sans-serif;font-size:0.82rem;font-weight:700;cursor:pointer">💬 WA Admin</button>';
@@ -1868,16 +1941,13 @@ function renderSiswa(){
 
   const needPay=[], ok=[];
   activeFiltered.forEach(s=>{
-    const total=countSessionsForBilling(s.name);
-    const cycle=s.payCycle||4;
-    const isDue=total>0&&total%cycle===0;
+    const {total,cycle,isDue}=computeIsDue(s);
     (isDue?needPay:ok).push({s,total,cycle,isDue});
   });
 
-  const totalNeedPay=students.filter(s=>{
+  const totalNeedPay=paymentMode==='off'?0:students.filter(s=>{
     if(s.inactive) return false;
-    const t=countSessionsForBilling(s.name);
-    return t>0&&t%(s.payCycle||4)===0;
+    return computeIsDue(s).isDue;
   }).length;
 
   const instOptions=['<option value="">Semua Mata Pelajaran</option>',
@@ -1888,7 +1958,7 @@ function renderSiswa(){
 
   let html='<div class="page-title-area">';
   html+='<div class="page-title">Siswa</div>';
-  html+='<div class="page-sub">'+activeFiltered.length+' siswa aktif'+(inactiveList.length?' · '+inactiveList.length+' nonaktif':'')+' · '+totalNeedPay+' perlu bayar</div>';
+  html+='<div class="page-sub">'+activeFiltered.length+' siswa aktif'+(inactiveList.length?' · '+inactiveList.length+' nonaktif':'')+(paymentMode==='off'?'':' · '+totalNeedPay+' perlu bayar')+'</div>';
   html+='</div>';
   html+='<div style="padding:0 16px">';
   html+='<div style="background:var(--card);border:1.5px solid var(--border);border-radius:12px;padding:10px 14px;display:flex;align-items:center;gap:8px;margin-bottom:8px">';
@@ -1963,9 +2033,7 @@ function renderSiswaList(){
 
   const needPay=[], ok=[];
   activeFiltered.forEach(s=>{
-    const total=countSessionsForBilling(s.name);
-    const cycle=s.payCycle||4;
-    const isDue=total>0&&total%cycle===0;
+    const {total,cycle,isDue}=computeIsDue(s);
     (isDue?needPay:ok).push({s,total,cycle,isDue});
   });
 
@@ -3448,6 +3516,11 @@ function renderLainnya(){
           <div class="menu-text"><div class="menu-label">Pengaturan Notifikasi</div><div class="menu-desc">Ganti suara & volume notifikasi jadwal</div></div>
           <div class="menu-arrow">›</div>
         </div>
+        <div class="menu-item" onclick="renderPaymentSettings()">
+          <div class="menu-icon" style="background:#e6f7ee">💳</div>
+          <div class="menu-text"><div class="menu-label">Fitur Pembayaran</div><div class="menu-desc">${paymentMode==='session'?'Ingatkan tiap pertemuan':paymentMode==='monthly'?'Ingatkan akhir bulan':'Semua pengingat mati'}</div></div>
+          <div class="menu-arrow">›</div>
+        </div>
         <div class="menu-item" onclick="renderPengaturan()">
           <div class="menu-icon" style="background:#f3e8ff">⚙️</div>
           <div class="menu-text"><div class="menu-label">Pengaturan Aplikasi</div><div class="menu-desc">Ubah nama, logo, dan warna tema</div></div>
@@ -3506,7 +3579,8 @@ const BACKUP_SETTINGS_KEYS=[
   'rms_school_name','rms_school_sub','rms_school_logo','rms_school_logo_img','rms_school_color',
   'rms4_admin_wa',
   'llk_notif_sound','llk_notif_volume','llk_notif_custom_mp3','llk_notif_custom_name',
-  'llk_notif_sheet_time','llk_notif_kirim_time','llk_income_hidden'
+  'llk_notif_sheet_time','llk_notif_kirim_time','llk_income_hidden','llk_payment_mode',
+  'llk_tpl_session','llk_tpl_monthly'
 ];
 function collectSettingsData(){
   const out={};
@@ -4093,6 +4167,64 @@ function doDelete(){
   students.splice(editIdx,1);
   save();closeModal();render();
   toast('🗑 '+name+' dihapus');
+}
+
+// ── FITUR PEMBAYARAN ───────────────────────────────────
+function renderPaymentSettings(){
+  history.pushState({tab:'lainnya', view:'sub'},'');
+  const opts=[
+    {key:'session', icon:'🔁', label:'Ingatkan Setiap Pertemuan', desc:'Muncul saat sesi kelipatan sesuai siklus bayar yang disepakati per siswa (contoh: setiap 4x pertemuan).'},
+    {key:'monthly', icon:'📅', label:'Ingatkan Setiap Akhir Bulan', desc:'Tombol "Bayar" / "Ingatkan ke WA" muncul untuk semua siswa aktif di beberapa hari terakhir tiap bulan.'},
+    {key:'off', icon:'🔕', label:'Matikan Semua Pengingat', desc:'Sembunyikan semua status & tombol pembayaran di tab Siswa.'}
+  ];
+  const optsHtml=opts.map(o=>{
+    const isActive=paymentMode===o.key;
+    return `<div onclick="setPaymentMode('${o.key}')"
+      style="padding:14px;border-radius:12px;border:1.5px solid ${isActive?'var(--red)':'var(--border)'};background:${isActive?'#fff5f5':'var(--card)'};cursor:pointer;margin-bottom:8px;transition:all 0.15s">
+      <div style="display:flex;align-items:center;gap:10px">
+        <span style="font-size:1.3rem">${o.icon}</span>
+        <div style="flex:1">
+          <div style="font-size:0.88rem;font-weight:${isActive?'700':'600'};color:${isActive?'var(--red)':'var(--text)'}">${o.label}</div>
+          <div style="font-size:0.74rem;color:var(--muted);margin-top:2px;line-height:1.4">${o.desc}</div>
+        </div>
+        ${isActive?'<span style="color:var(--red);font-weight:700">✓</span>':''}
+      </div>
+    </div>`;
+  }).join('');
+
+  document.getElementById('mainContent').innerHTML=`
+    <div class="page-title-area">
+      <div class="hist-back" onclick="renderLainnya()"><span>‹</span><div class="hist-back-label">Kembali</div></div>
+      <div class="page-title" style="margin-top:8px">Fitur Pembayaran</div>
+      <div class="page-sub">Pilih cara sistem mengingatkan pembayaran murid.</div>
+    </div>
+    <div style="padding:0 16px 24px">
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:16px;margin-bottom:16px">
+        <div style="font-size:0.72rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:12px">Mode Pengingat</div>
+        ${optsHtml}
+      </div>
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:16px;margin-bottom:16px">
+        <div style="font-size:0.72rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px">🔁 Template Pesan · Setiap Pertemuan</div>
+        <div style="font-size:0.72rem;color:var(--muted);margin-bottom:10px">Dipakai saat menagih langsung ke WA siswa dari tab Absensi.</div>
+        <textarea id="tplSessionInput" rows="5" style="width:100%;font-family:'DM Sans',sans-serif;font-size:0.82rem;border:1.5px solid var(--border);border-radius:10px;padding:10px;background:var(--card2);color:var(--text);resize:vertical">${escapeHtml(getPaymentTemplate('session'))}</textarea>
+        <div style="font-size:0.68rem;color:var(--muted);margin-top:6px;line-height:1.5">Variabel: <code>{nama}</code> <code>{sesi}</code> <code>{siklus}</code></div>
+        <div style="display:flex;gap:8px;margin-top:10px">
+          <button onclick="savePaymentTemplate('session')" style="flex:1;padding:10px;background:var(--red);color:#fff;border:none;border-radius:10px;font-family:sans-serif;font-size:0.8rem;font-weight:700;cursor:pointer">💾 Simpan</button>
+          <button onclick="resetPaymentTemplate('session')" style="padding:10px 14px;background:#fff;color:var(--muted);border:1.5px solid var(--border);border-radius:10px;font-family:sans-serif;font-size:0.8rem;font-weight:700;cursor:pointer">↩️ Default</button>
+        </div>
+      </div>
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:16px;margin-bottom:16px">
+        <div style="font-size:0.72rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px">📅 Template Pesan · Akhir Bulan</div>
+        <div style="font-size:0.72rem;color:var(--muted);margin-bottom:10px">Dipakai saat menagih langsung ke WA siswa saat mode Akhir Bulan aktif.</div>
+        <textarea id="tplMonthlyInput" rows="5" style="width:100%;font-family:'DM Sans',sans-serif;font-size:0.82rem;border:1.5px solid var(--border);border-radius:10px;padding:10px;background:var(--card2);color:var(--text);resize:vertical">${escapeHtml(getPaymentTemplate('monthly'))}</textarea>
+        <div style="font-size:0.68rem;color:var(--muted);margin-top:6px;line-height:1.5">Variabel: <code>{nama}</code> <code>{sesi}</code> <code>{bulan}</code></div>
+        <div style="display:flex;gap:8px;margin-top:10px">
+          <button onclick="savePaymentTemplate('monthly')" style="flex:1;padding:10px;background:var(--red);color:#fff;border:none;border-radius:10px;font-family:sans-serif;font-size:0.8rem;font-weight:700;cursor:pointer">💾 Simpan</button>
+          <button onclick="resetPaymentTemplate('monthly')" style="padding:10px 14px;background:#fff;color:var(--muted);border:1.5px solid var(--border);border-radius:10px;font-family:sans-serif;font-size:0.8rem;font-weight:700;cursor:pointer">↩️ Default</button>
+        </div>
+      </div>
+      <div style="text-align:center;padding:0 8px 16px;font-size:0.72rem;color:var(--muted);line-height:1.5">Perubahan mode & template langsung berlaku di tab Absensi & Siswa.</div>
+    </div>`;
 }
 
 // ── PENGATURAN NOTIFIKASI ──────────────────────────────
