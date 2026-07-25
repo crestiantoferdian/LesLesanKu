@@ -1582,9 +1582,33 @@ function setPaymentMode(mode){
 }
 
 // ── TEMPLATE PESAN PENAGIHAN KE SISWA ─────────────────
-const DEFAULT_TPL_SESSION='Halo {nama}! 😊\nMengingatkan bahwa sudah {sesi}x pertemuan les di sini.\nMohon segera melakukan pembayaran ya. Terima kasih! 🎵';
-const DEFAULT_TPL_MONTHLY='Halo {nama}! 😊\nMengingatkan pembayaran les bulan {bulan} ya.\nSudah {sesi}x pertemuan bulan ini.\nMohon segera melakukan pembayaran. Terima kasih! 🎵';
+const DEFAULT_TPL_SESSION='{salam},\nKepada Yth. Bapak/Ibu {nama},\n\nMohon izin mengingatkan bahwa les {nama} telah berjalan {sesi}x pertemuan.\nMohon kesediaan Bapak/Ibu untuk melakukan pembayaran sebesar {biaya}.\n\nTerima kasih atas perhatian dan kerja samanya.\n\nHormat kami';
+const DEFAULT_TPL_MONTHLY='{salam},\nKepada Yth. Bapak/Ibu {nama},\n\nMohon izin mengingatkan pembayaran les bulan {bulan}.\nSelama bulan ini telah berlangsung {sesi}x pertemuan, yaitu pada tanggal {tanggal}.\nMohon kesediaan Bapak/Ibu untuk melakukan pembayaran sebesar {biaya}.\n\nTerima kasih atas perhatian dan kerja samanya.\n\nHormat kami';
 function getMonthNameID(d){ return (d||new Date()).toLocaleDateString('id-ID',{month:'long'}); }
+function formatRupiah(n){ return 'Rp '+Math.round(n||0).toLocaleString('id-ID'); }
+// Sapaan formal otomatis mengikuti jam saat pesan dikirim
+function getGreetingID(d){
+  const h=(d||new Date()).getHours();
+  if(h>=4&&h<11) return 'Selamat Pagi';
+  if(h>=11&&h<15) return 'Selamat Siang';
+  if(h>=15&&h<18) return 'Selamat Sore';
+  return 'Selamat Malam';
+}
+// Hitung jumlah pertemuan & daftar tanggal (dalam bulan berjalan) untuk 1 siswa — dipakai template Akhir Bulan
+function getMonthlySessionInfo(name, monthKey){
+  monthKey = monthKey || getMonthKey();
+  let count=0;
+  const dateSet=new Set();
+  Object.entries(attendance).forEach(([dateKey,dayAtt])=>{
+    if(!dateKey.startsWith(monthKey)) return;
+    if(dayAtt[name]==='hadir'||dayAtt[name]==='alpa'){ count++; dateSet.add(dateKey); }
+    Object.keys(dayAtt).forEach(k=>{
+      if(k.startsWith(name+'_extra_')&&(dayAtt[k]==='hadir'||dayAtt[k]==='alpa')){ count++; dateSet.add(dateKey); }
+    });
+  });
+  const tanggalStr=[...dateSet].sort().map(d=>parseInt(d.split('-')[2],10)).join(', ');
+  return {count, tanggalStr: tanggalStr||'-'};
+}
 function getPaymentTemplate(mode){
   const key=mode==='monthly'?'llk_tpl_monthly':'llk_tpl_session';
   const def=mode==='monthly'?DEFAULT_TPL_MONTHLY:DEFAULT_TPL_SESSION;
@@ -1612,10 +1636,19 @@ function resetPaymentTemplate(mode){
 function sendPaymentWA(name){
   const s=students.find(x=>x.name===name)||{};
   const phone=(s.phone||'').replace(/\D/g,'');
-  const total=countSessions(name);
   const mode=paymentMode==='monthly'?'monthly':'session';
   const tpl=getPaymentTemplate(mode);
-  const msgText=fillTemplate(tpl,{nama:name,sesi:total,siklus:s.payCycle||4,bulan:getMonthNameID()});
+  let vars;
+  if(mode==='monthly'){
+    const info=getMonthlySessionInfo(name);
+    const rate=s.rate||40000;
+    vars={nama:name,sesi:info.count,tanggal:info.tanggalStr,bulan:getMonthNameID(),siklus:s.payCycle||4,salam:getGreetingID(),biaya:formatRupiah(info.count*rate)};
+  }else{
+    const sesiBelumBayar=countSessionsForBilling(name); // sesi sejak terakhir bayar — ini yang ditagih
+    const rate=s.rate||40000;
+    vars={nama:name,sesi:sesiBelumBayar,siklus:s.payCycle||4,bulan:getMonthNameID(),salam:getGreetingID(),biaya:formatRupiah(sesiBelumBayar*rate)};
+  }
+  const msgText=fillTemplate(tpl,vars);
   const msg=encodeURIComponent(msgText);
   if(phone) window.open(`https://wa.me/62${phone.replace(/^0/,'')}?text=${msg}`,'_blank');
   else toast('❌ Nomor WA tidak ada — cek data murid');
@@ -4207,7 +4240,7 @@ function renderPaymentSettings(){
         <div style="font-size:0.72rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px">🔁 Template Pesan · Setiap Pertemuan</div>
         <div style="font-size:0.72rem;color:var(--muted);margin-bottom:10px">Dipakai saat menagih langsung ke WA siswa dari tab Absensi.</div>
         <textarea id="tplSessionInput" rows="5" style="width:100%;font-family:'DM Sans',sans-serif;font-size:0.82rem;border:1.5px solid var(--border);border-radius:10px;padding:10px;background:var(--card2);color:var(--text);resize:vertical">${escapeHtml(getPaymentTemplate('session'))}</textarea>
-        <div style="font-size:0.68rem;color:var(--muted);margin-top:6px;line-height:1.5">Variabel: <code>{nama}</code> <code>{sesi}</code> <code>{siklus}</code></div>
+        <div style="font-size:0.68rem;color:var(--muted);margin-top:6px;line-height:1.5">Variabel: <code>{salam}</code> <code>{nama}</code> <code>{sesi}</code> <code>{siklus}</code> <code>{biaya}</code></div>
         <div style="display:flex;gap:8px;margin-top:10px">
           <button onclick="savePaymentTemplate('session')" style="flex:1;padding:10px;background:var(--red);color:#fff;border:none;border-radius:10px;font-family:sans-serif;font-size:0.8rem;font-weight:700;cursor:pointer">💾 Simpan</button>
           <button onclick="resetPaymentTemplate('session')" style="padding:10px 14px;background:#fff;color:var(--muted);border:1.5px solid var(--border);border-radius:10px;font-family:sans-serif;font-size:0.8rem;font-weight:700;cursor:pointer">↩️ Default</button>
@@ -4217,7 +4250,7 @@ function renderPaymentSettings(){
         <div style="font-size:0.72rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px">📅 Template Pesan · Akhir Bulan</div>
         <div style="font-size:0.72rem;color:var(--muted);margin-bottom:10px">Dipakai saat menagih langsung ke WA siswa saat mode Akhir Bulan aktif.</div>
         <textarea id="tplMonthlyInput" rows="5" style="width:100%;font-family:'DM Sans',sans-serif;font-size:0.82rem;border:1.5px solid var(--border);border-radius:10px;padding:10px;background:var(--card2);color:var(--text);resize:vertical">${escapeHtml(getPaymentTemplate('monthly'))}</textarea>
-        <div style="font-size:0.68rem;color:var(--muted);margin-top:6px;line-height:1.5">Variabel: <code>{nama}</code> <code>{sesi}</code> <code>{bulan}</code></div>
+        <div style="font-size:0.68rem;color:var(--muted);margin-top:6px;line-height:1.5">Variabel: <code>{salam}</code> <code>{nama}</code> <code>{sesi}</code> <code>{bulan}</code> <code>{tanggal}</code> <code>{biaya}</code></div>
         <div style="display:flex;gap:8px;margin-top:10px">
           <button onclick="savePaymentTemplate('monthly')" style="flex:1;padding:10px;background:var(--red);color:#fff;border:none;border-radius:10px;font-family:sans-serif;font-size:0.8rem;font-weight:700;cursor:pointer">💾 Simpan</button>
           <button onclick="resetPaymentTemplate('monthly')" style="padding:10px 14px;background:#fff;color:var(--muted);border:1.5px solid var(--border);border-radius:10px;font-family:sans-serif;font-size:0.8rem;font-weight:700;cursor:pointer">↩️ Default</button>
