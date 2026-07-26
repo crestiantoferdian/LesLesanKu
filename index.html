@@ -718,7 +718,42 @@ body{
 // ── CONSTANTS ─────────────────────────────────────────
 const DAYS=['Senin','Selasa','Rabu','Kamis','Jumat','Sabtu','Minggu'];
 const DAYS_JS=[1,2,3,4,5,6,0];
-const ICONS={Piano:'🎹',Gitar:'🎸',Violin:'🎻',Biola:'🎻',Drum:'🥁',Bass:'🎸',Vocal:'🎤',Vokal:'🎤',Keyboard:'🎹',Flute:'🎵',Saxophone:'🎷'};
+const ICONS={
+  // Musik
+  Piano:'🎹',Gitar:'🎸',Violin:'🎻',Biola:'🎻',Drum:'🥁',Bass:'🎸',Vocal:'🎤',Vokal:'🎤',Keyboard:'🎹',Flute:'🎵',Saxophone:'🎷',
+  // Pelajaran / akademik umum
+  Matematika:'🔢',Math:'🔢',Kalkulus:'🔢',
+  'Bahasa Inggris':'🇬🇧',English:'🇬🇧',
+  'Bahasa Indonesia':'🇮🇩',
+  IPA:'🔬',Sains:'🔬',Science:'🔬',
+  Fisika:'⚛️',Physics:'⚛️',
+  Kimia:'🧪',Chemistry:'🧪',
+  Biologi:'🧬',Biology:'🧬',
+  IPS:'🌍',Geografi:'🌍',Geography:'🌍',
+  Sejarah:'📜',History:'📜',
+  Ekonomi:'💹',Economics:'💹',Akuntansi:'📊',
+  Sosiologi:'🧑\u200d🤝\u200d🧑',
+  Komputer:'💻',Coding:'💻',Programming:'💻','Ilmu Komputer':'💻',
+  Mengaji:'📖','Al-Quran':'📖',Quran:'📖','Baca Tulis':'✏️',
+  PPKN:'⚖️',Hukum:'⚖️',
+  Bahasa:'🌐',Mandarin:'🇨🇳',Chinese:'🇨🇳',Jepang:'🇯🇵',Japanese:'🇯🇵',Jerman:'🇩🇪',German:'🇩🇪',Arab:'🇸🇦',Arabic:'🇸🇦',Korea:'🇰🇷',Korean:'🇰🇷',Prancis:'🇫🇷',French:'🇫🇷',Spanyol:'🇪🇸',Spanish:'🇪🇸'
+};
+// Cari icon berdasarkan mata pelajaran/instrumen — cocok persis dulu, lalu tanpa peduli huruf besar/kecil, lalu cocok sebagian
+function getInstrumentIcon(instrument){
+  if(!instrument) return '🎵';
+  if(ICONS[instrument]) return ICONS[instrument];
+  const lower=instrument.toLowerCase().trim();
+  const keys=Object.keys(ICONS).filter(k=>k!=='Bahasa'); // 'Bahasa' generik dicek belakangan, biar nama bahasa spesifik menang
+  const exact=keys.find(k=>k.toLowerCase()===lower);
+  if(exact) return ICONS[exact];
+  const partialMatches=keys.filter(k=>lower.includes(k.toLowerCase())||k.toLowerCase().includes(lower));
+  if(partialMatches.length){
+    partialMatches.sort((a,b)=>b.length-a.length); // key terpanjang = paling spesifik
+    return ICONS[partialMatches[0]];
+  }
+  if(lower.includes('bahasa')||lower.includes('language')) return '🌐';
+  return '🎵';
+}
 
 // ── STATE ─────────────────────────────────────────────
 let students=[];
@@ -755,7 +790,7 @@ function shareJadwal(dayName, dateKey){
 
   let text=`*${dateLabel}*\n`;
   dayS.forEach(s=>{
-    const icon=ICONS[s.instrument]||'🎵';
+    const icon=getInstrumentIcon(s.instrument);
     const t1=(s.time||'').replace(':','.');
     const t2=(s.time2||'').replace(':','.');
     text+=`${t1}${t2?'-'+t2:''} ${s.name} ${icon}\n`;
@@ -1239,7 +1274,7 @@ function renderAbsensi(){
   const belumC=jadwal-hadirC-izinC-alpaC;
 
   const cardsHtml=dayS.length?dayS.map(s=>{
-    const icon=ICONS[s.instrument]||'🎵';
+    const icon=getInstrumentIcon(s.instrument);
     const isVokal=(s.instrument||'').toLowerCase().includes('vok');
     const sidx=s._originalIdx!==undefined?s._originalIdx:students.findIndex(x=>x.name===s.name);
     const attKey=s._attKey||s.name;
@@ -1898,7 +1933,7 @@ function confirmMarkPaid(btn, studentName){
 }
 
 function siswaCardHtml(s,total,cycle,isDue){
-    const icon=ICONS[s.instrument]||'🎵';
+    const icon=getInstrumentIcon(s.instrument);
     const isVokal=(s.instrument||'').toLowerCase().includes('vok');
     const safeName=s.name.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
 
@@ -2094,7 +2129,7 @@ function renderStudentProfile(name, period){
   window._profileName = name;
   window._profilePeriod = period;
   const s = students.find(x=>x.name===name)||{};
-  const icon = ICONS[s.instrument]||'🎵';
+  const icon=getInstrumentIcon(s.instrument);
   const isVokal = (s.instrument||'').toLowerCase().includes('vok');
 
   // Date boundaries
@@ -2505,7 +2540,7 @@ function buildDateDetail(dk){
     const sidx=s._originalIdx!==undefined?s._originalIdx:students.indexOf(s);
     const status=(attendance[attDateKey]||{})[attKey]||'belum';
     const note=attNotes[attDateKey+'_'+attKey]||{};
-    const icon=ICONS[s.instrument]||'🎵';
+    const icon=getInstrumentIcon(s.instrument);
     const isVokal=(s.instrument||'').toLowerCase().includes('vok');
     const safeKey=attKey.replace(/'/g,"\\'");
     const safeDk=attDateKey.replace(/'/g,"\\'");
@@ -2975,7 +3010,7 @@ function buildTrackCards(){
   };
 
   return filtered.map(({s})=>{
-    const icon=ICONS[s.instrument]||'🎵';
+    const icon=getInstrumentIcon(s.instrument);
     const isVokal=(s.instrument||'').toLowerCase().includes('vok');
     const {h,i,a}=allTotals(s.name);
     const total=countSessions(s.name);
@@ -3003,7 +3038,7 @@ function openHistoryDetail(name){
 function renderHistoryDetail(){
   const name=viewingStudent;
   const s=students.find(x=>x.name===name)||{};
-  const icon=ICONS[s.instrument]||'🎵';
+  const icon=getInstrumentIcon(s.instrument);
 
   // Get all records for this student sorted newest first
   const entries=Object.keys(attendance)
@@ -3567,7 +3602,7 @@ function renderLainnya(){
 function showAllStudents(){
   const sorted=[...students].sort((a,b)=>a.name.localeCompare(b.name));
   const html=sorted.length?sorted.map(s=>{
-    const icon=ICONS[s.instrument]||'🎵';
+    const icon=getInstrumentIcon(s.instrument);
     const idx=students.indexOf(s);
     const total=countSessions(s.name);
     return `<div class="menu-item" onclick="openEdit(${idx})">
