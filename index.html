@@ -1619,6 +1619,7 @@ function setPaymentMode(mode){
 // ── TEMPLATE PESAN PENAGIHAN KE SISWA ─────────────────
 const DEFAULT_TPL_SESSION='{salam},\nKepada Yth. Bapak/Ibu {nama},\n\nMohon izin mengingatkan bahwa les {nama} telah berjalan {sesi}x pertemuan.\nMohon kesediaan Bapak/Ibu untuk melakukan pembayaran sebesar {biaya}.\n\nTerima kasih atas perhatian dan kerja samanya.\n\nHormat kami';
 const DEFAULT_TPL_MONTHLY='{salam},\nKepada Yth. Bapak/Ibu {nama},\n\nMohon izin mengingatkan pembayaran les bulan {bulan}.\nSelama bulan ini telah berlangsung {sesi}x pertemuan, yaitu pada tanggal {tanggal}.\nMohon kesediaan Bapak/Ibu untuk melakukan pembayaran sebesar {biaya}.\n\nTerima kasih atas perhatian dan kerja samanya.\n\nHormat kami';
+const DEFAULT_TPL_ADMIN='Halo Admin\nMohon diingatkan pembayaran:\nNama: {nama}\nMata Pelajaran: {instrumen}\nJadwal: {jadwal}\nTotal: {total}x {keterangan}\nTerima kasih!';
 function getMonthNameID(d){ return (d||new Date()).toLocaleDateString('id-ID',{month:'long'}); }
 function formatRupiah(n){ return 'Rp '+Math.round(n||0).toLocaleString('id-ID'); }
 // Sapaan formal otomatis mengikuti jam saat pesan dikirim
@@ -1644,25 +1645,31 @@ function getMonthlySessionInfo(name, monthKey){
   const tanggalStr=[...dateSet].sort().map(d=>parseInt(d.split('-')[2],10)).join(', ');
   return {count, tanggalStr: tanggalStr||'-'};
 }
+const TPL_META={
+  session:{key:'llk_tpl_session', def:null}, // def diisi belakangan (DEFAULT_TPL_SESSION)
+  monthly:{key:'llk_tpl_monthly', def:null},
+  admin:{key:'llk_tpl_admin', def:null}
+};
 function getPaymentTemplate(mode){
-  const key=mode==='monthly'?'llk_tpl_monthly':'llk_tpl_session';
-  const def=mode==='monthly'?DEFAULT_TPL_MONTHLY:DEFAULT_TPL_SESSION;
-  return localStorage.getItem(key)||def;
+  TPL_META.session.def=DEFAULT_TPL_SESSION;
+  TPL_META.monthly.def=DEFAULT_TPL_MONTHLY;
+  TPL_META.admin.def=DEFAULT_TPL_ADMIN;
+  const meta=TPL_META[mode]||TPL_META.session;
+  return localStorage.getItem(meta.key)||meta.def;
 }
 function fillTemplate(tpl,vars){
   return tpl.replace(/\{(\w+)\}/g,(m,k)=>(vars[k]!==undefined?vars[k]:m));
 }
 function savePaymentTemplate(mode){
-  const id=mode==='monthly'?'tplMonthlyInput':'tplSessionInput';
-  const key=mode==='monthly'?'llk_tpl_monthly':'llk_tpl_session';
-  const val=document.getElementById(id).value.trim();
-  const def=mode==='monthly'?DEFAULT_TPL_MONTHLY:DEFAULT_TPL_SESSION;
-  localStorage.setItem(key,val||def);
+  const ids={session:'tplSessionInput', monthly:'tplMonthlyInput', admin:'tplAdminInput'};
+  const meta=TPL_META[mode]||TPL_META.session;
+  const val=document.getElementById(ids[mode]).value.trim();
+  localStorage.setItem(meta.key, val||getPaymentTemplate(mode));
   toast('✅ Template pesan disimpan');
 }
 function resetPaymentTemplate(mode){
-  const key=mode==='monthly'?'llk_tpl_monthly':'llk_tpl_session';
-  localStorage.removeItem(key);
+  const meta=TPL_META[mode]||TPL_META.session;
+  localStorage.removeItem(meta.key);
   renderPaymentSettings();
   toast('↩️ Template dikembalikan ke default');
 }
@@ -1957,7 +1964,9 @@ function siswaCardHtml(s,total,cycle,isDue){
     const sessInCycle=total%cycle;
     const remaining=isDue?0:cycle-sessInCycle;
     const adminWa=(s.adminWa||adminWaNumber||'').replace(/\D/g,'').replace(/^0/,'');
-    const waText='Halo Admin\nMohon diingatkan pembayaran:\nNama: '+s.name+'\nInstrumen: '+(s.instrument||'-')+'\nJadwal: '+s.day+' '+s.time+(s.time2?'-'+s.time2:'')+(s.day2?' & '+s.day2+' '+s.time2b+(s.time2c?'-'+s.time2c:''):'')+'\nTotal: '+total+'x'+(isMonthly?' (tagihan akhir bulan)':' (siklus '+cycle+'x)')+'\nTerima kasih!';
+    const jadwalStr=s.day+' '+s.time+(s.time2?'-'+s.time2:'')+(s.day2?' & '+s.day2+' '+s.time2b+(s.time2c?'-'+s.time2c:''):'');
+    const keteranganStr=isMonthly?'(tagihan akhir bulan)':'(siklus '+cycle+'x)';
+    const waText=fillTemplate(getPaymentTemplate('admin'),{nama:s.name,instrumen:s.instrument||'-',jadwal:jadwalStr,total:total,keterangan:keteranganStr,siklus:cycle,salam:getGreetingID()});
     const waLink=adminWa?'https://wa.me/62'+adminWa+'?text='+encodeURIComponent(waText):'';
 
     const borderColor=isDue?'rgba(192,57,43,0.4)':'var(--border)';
@@ -3648,7 +3657,7 @@ const BACKUP_SETTINGS_KEYS=[
   'rms4_admin_wa',
   'llk_notif_sound','llk_notif_volume','llk_notif_custom_mp3','llk_notif_custom_name',
   'llk_notif_sheet_time','llk_notif_kirim_time','llk_income_hidden','llk_payment_mode',
-  'llk_tpl_session','llk_tpl_monthly'
+  'llk_tpl_session','llk_tpl_monthly','llk_tpl_admin'
 ];
 function collectSettingsData(){
   const out={};
@@ -4260,6 +4269,14 @@ function renderPaymentSettings(){
     </div>`;
   }).join('');
 
+  const sessionActive=paymentMode==='session';
+  const monthlyActive=paymentMode==='monthly';
+  const adminActive=paymentMode!=='off';
+  const boxStyle=(active)=>active
+    ?'background:#fff5f5;border:2px solid var(--red);border-radius:16px;padding:16px;margin-bottom:16px'
+    :'background:var(--card);border:1px solid var(--border);border-radius:16px;padding:16px;margin-bottom:16px';
+  const activeTag=(active)=>active?' <span style="font-size:0.62rem;font-weight:800;color:#fff;background:var(--red);border-radius:20px;padding:2px 8px;vertical-align:middle">AKTIF</span>':'';
+
   document.getElementById('mainContent').innerHTML=`
     <div class="page-title-area">
       <div class="hist-back" onclick="renderLainnya()"><span>‹</span><div class="hist-back-label">Kembali</div></div>
@@ -4271,8 +4288,8 @@ function renderPaymentSettings(){
         <div style="font-size:0.72rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:12px">Mode Pengingat</div>
         ${optsHtml}
       </div>
-      <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:16px;margin-bottom:16px">
-        <div style="font-size:0.72rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px">🔁 Template Pesan · Setiap Pertemuan</div>
+      <div style="${boxStyle(sessionActive)}">
+        <div style="font-size:0.98rem;font-weight:800;color:var(--text);letter-spacing:0.01em;margin-bottom:4px">🔁 Template Pesan · Setiap Pertemuan${activeTag(sessionActive)}</div>
         <div style="font-size:0.72rem;color:var(--muted);margin-bottom:10px">Dipakai saat menagih langsung ke WA siswa dari tab Absensi.</div>
         <textarea id="tplSessionInput" rows="5" style="width:100%;font-family:'DM Sans',sans-serif;font-size:0.82rem;border:1.5px solid var(--border);border-radius:10px;padding:10px;background:var(--card2);color:var(--text);resize:vertical">${escapeHtml(getPaymentTemplate('session'))}</textarea>
         <div style="font-size:0.68rem;color:var(--muted);margin-top:6px;line-height:1.5">Variabel: <code>{salam}</code> <code>{nama}</code> <code>{sesi}</code> <code>{siklus}</code> <code>{biaya}</code></div>
@@ -4281,14 +4298,24 @@ function renderPaymentSettings(){
           <button onclick="resetPaymentTemplate('session')" style="padding:10px 14px;background:#fff;color:var(--muted);border:1.5px solid var(--border);border-radius:10px;font-family:sans-serif;font-size:0.8rem;font-weight:700;cursor:pointer">↩️ Default</button>
         </div>
       </div>
-      <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:16px;margin-bottom:16px">
-        <div style="font-size:0.72rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px">📅 Template Pesan · Akhir Bulan</div>
+      <div style="${boxStyle(monthlyActive)}">
+        <div style="font-size:0.98rem;font-weight:800;color:var(--text);letter-spacing:0.01em;margin-bottom:4px">📅 Template Pesan · Akhir Bulan${activeTag(monthlyActive)}</div>
         <div style="font-size:0.72rem;color:var(--muted);margin-bottom:10px">Dipakai saat menagih langsung ke WA siswa saat mode Akhir Bulan aktif.</div>
         <textarea id="tplMonthlyInput" rows="5" style="width:100%;font-family:'DM Sans',sans-serif;font-size:0.82rem;border:1.5px solid var(--border);border-radius:10px;padding:10px;background:var(--card2);color:var(--text);resize:vertical">${escapeHtml(getPaymentTemplate('monthly'))}</textarea>
         <div style="font-size:0.68rem;color:var(--muted);margin-top:6px;line-height:1.5">Variabel: <code>{salam}</code> <code>{nama}</code> <code>{sesi}</code> <code>{bulan}</code> <code>{tanggal}</code> <code>{biaya}</code></div>
         <div style="display:flex;gap:8px;margin-top:10px">
           <button onclick="savePaymentTemplate('monthly')" style="flex:1;padding:10px;background:var(--red);color:#fff;border:none;border-radius:10px;font-family:sans-serif;font-size:0.8rem;font-weight:700;cursor:pointer">💾 Simpan</button>
           <button onclick="resetPaymentTemplate('monthly')" style="padding:10px 14px;background:#fff;color:var(--muted);border:1.5px solid var(--border);border-radius:10px;font-family:sans-serif;font-size:0.8rem;font-weight:700;cursor:pointer">↩️ Default</button>
+        </div>
+      </div>
+      <div style="${boxStyle(adminActive)}">
+        <div style="font-size:0.98rem;font-weight:800;color:var(--text);letter-spacing:0.01em;margin-bottom:4px">💬 Template Pesan · WA Admin${activeTag(adminActive)}</div>
+        <div style="font-size:0.72rem;color:var(--muted);margin-bottom:10px">Dipakai saat menekan tombol "WA Admin" di kartu Siswa — ini pesan ke nomor admin/kamu sendiri, bukan ke siswa.</div>
+        <textarea id="tplAdminInput" rows="6" style="width:100%;font-family:'DM Sans',sans-serif;font-size:0.82rem;border:1.5px solid var(--border);border-radius:10px;padding:10px;background:var(--card2);color:var(--text);resize:vertical">${escapeHtml(getPaymentTemplate('admin'))}</textarea>
+        <div style="font-size:0.68rem;color:var(--muted);margin-top:6px;line-height:1.5">Variabel: <code>{nama}</code> <code>{instrumen}</code> <code>{jadwal}</code> <code>{total}</code> <code>{keterangan}</code></div>
+        <div style="display:flex;gap:8px;margin-top:10px">
+          <button onclick="savePaymentTemplate('admin')" style="flex:1;padding:10px;background:var(--red);color:#fff;border:none;border-radius:10px;font-family:sans-serif;font-size:0.8rem;font-weight:700;cursor:pointer">💾 Simpan</button>
+          <button onclick="resetPaymentTemplate('admin')" style="padding:10px 14px;background:#fff;color:var(--muted);border:1.5px solid var(--border);border-radius:10px;font-family:sans-serif;font-size:0.8rem;font-weight:700;cursor:pointer">↩️ Default</button>
         </div>
       </div>
       <div style="text-align:center;padding:0 8px 16px;font-size:0.72rem;color:var(--muted);line-height:1.5">Perubahan mode & template langsung berlaku di tab Absensi & Siswa.</div>
