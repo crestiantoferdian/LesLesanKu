@@ -863,6 +863,20 @@ function loadStorage(){
   });
   if(migrated) save();
 
+  // Migrasi/bersih-bersih: hapus reschedule "nyasar" tanpa hari valid.
+  // Ini muncul dari bug lama saat sesi Jadwal Tambahan (siswa tanpa hari rutin)
+  // direschedule lewat mekanisme mingguan — sekarang sesi tambahan dipindah langsung,
+  // jadi entri lama semacam ini sudah tidak relevan & bisa bikin kartu dobel.
+  let rsCleaned=false;
+  students.forEach(function(s){
+    if(s.reschedules&&s.reschedules.length){
+      const before=s.reschedules.length;
+      s.reschedules=s.reschedules.filter(r=>r.day&&DAYS.includes(r.day));
+      if(s.reschedules.length!==before) rsCleaned=true;
+    }
+  });
+  if(rsCleaned) save();
+
   // Migrasi: beri ID stabil ke setiap "Tambahan Kelas" (extraDates), supaya
   // menghapus satu entri tidak menggeser index entri lain dan merusak
   // keterkaitan dengan data absensi yang sudah tersimpan (bug lama).
@@ -1383,7 +1397,7 @@ function renderAbsensi(){
               : `<button class="att-btn a-hadir ${status==='hadir'?'on':''}" onclick="openNoteModal('${attKey}','hadir','${s.name}','${attDateKey}')">✅</button>
             <button class="att-btn a-izin ${status==='izin'?'on':''}" onclick="openNoteModal('${attKey}','izin','${s.name}','${attDateKey}')">✋</button>
             <button class="att-btn a-alpa ${status==='alpa'?'on':''}" onclick="openNoteModal('${attKey}','alpa','${s.name}','${attDateKey}')">✗</button>
-            <button class="att-btn" onclick="openRescheduleModal('${s.name}','${s.day}',${sidx});event.stopPropagation()" title="Reschedule" style="${(s._hasActiveReschedule||s._isRescheduled)?'background:#fef3c7;border-color:#f59e0b;color:#d97706;font-weight:700':''}">🔄</button>`
+            <button class="att-btn" onclick="openRescheduleModal('${s.name}','${s.day}',${sidx},${s._isExtra?s._extraIdx:'null'},'${s._isExtra?s._extraDate:''}');event.stopPropagation()" title="Reschedule" style="${(s._hasActiveReschedule||s._isRescheduled)?'background:#fef3c7;border-color:#f59e0b;color:#d97706;font-weight:700':''}">🔄</button>`
             }
             ${s.sheetLink&&status!=='izin'?`<button class="att-btn sheet-btn-${sidx}" onclick="openSheetLinkByName('${s.name.replace(/'/g,"\'")}','${attDateKey}')" style="${localStorage.getItem('sheet_sent_'+attDateKey+'_'+s.name.replace(/[^a-zA-Z0-9]/g,'_'))?'background:#eafaf1;border-color:rgba(29,158,78,0.4)':'background:var(--blue-bg);border-color:rgba(0,113,227,0.3)'}">
               ${localStorage.getItem('sheet_sent_'+attDateKey+'_'+s.name.replace(/[^a-zA-Z0-9]/g,'_'))?'✅':'📨'}
@@ -1559,25 +1573,59 @@ function getStudentsForDay(dayName, dateKey, includeInactive){
     if(s.extraDates&&s.extraDates.length>0){
       s.extraDates.forEach((ed,ei)=>{
         if(!ed.date) return;
-        // Get day name of this extra date
+        const extraAttKey=s.name+'_extra_'+(ed.id!==undefined&&ed.id!==null?ed.id:ei);
+
+        // Kartu asal — hanya tampil persis di tanggal aslinya
         const edDay=new Date(ed.date+'T00:00:00').getDay();
         const edDayName=DAYS[DAYS_JS.indexOf(edDay)];
-        // Hanya tampilkan pada tab hari yang benar DAN tanggal yang tepat
-        if(edDayName!==dayName) return;
-        if(ed.date!==dateKey) return; // harus persis tanggal yang sedang dilihat
-        const extraAttKey=s.name+'_extra_'+(ed.id!==undefined&&ed.id!==null?ed.id:ei);
-        result.push(Object.assign({},s,{
-          time:ed.time||s.time,
-          time2:ed.time2||s.time2,
-          _originalIdx:originalIdx,
-          _isRescheduled:false,
-          _isExtra:true,
-          _extraIdx:ei,
-          _extraTotal:s.extraDates.length,
-          _extraNote:s.extraNote||'Tambahan Kelas',
-          _attKey:extraAttKey,
-          _extraDate:ed.date  // use the specific extra date as attendance key
-        }));
+        if(edDayName===dayName&&ed.date===dateKey){
+          if(ed.movedTo&&ed.movedTo.date){
+            // Sudah dipindah — tampilkan kartu asal dengan indikator "Pindah ke..." (persis seperti reschedule biasa)
+            const d=new Date(ed.movedTo.date+'T00:00:00');
+            const dn=['Min','Sen','Sel','Rab','Kam','Jum','Sab'][d.getDay()];
+            result.push(Object.assign({},s,{
+              time:ed.time||s.time,
+              time2:ed.time2||s.time2,
+              _originalIdx:originalIdx,
+              _isRescheduled:false,
+              _isExtra:true,
+              _extraIdx:ei,
+              _extraTotal:s.extraDates.length,
+              _extraNote:s.extraNote||'Tambahan Kelas',
+              _attKey:extraAttKey,
+              _extraDate:ed.date,
+              _hasActiveReschedule:true,
+              _rsInfo:{date:ed.movedTo.date,time:ed.movedTo.time,time2:ed.movedTo.time2,day:dn}
+            }));
+          } else {
+            result.push(Object.assign({},s,{
+              time:ed.time||s.time,
+              time2:ed.time2||s.time2,
+              _originalIdx:originalIdx,
+              _isRescheduled:false,
+              _isExtra:true,
+              _extraIdx:ei,
+              _extraTotal:s.extraDates.length,
+              _extraNote:s.extraNote||'Tambahan Kelas',
+              _attKey:extraAttKey,
+              _extraDate:ed.date
+            }));
+          }
+        }
+
+        // Kartu tujuan — muncul di tanggal baru hasil pindah, di hari manapun itu jatuh
+        if(ed.movedTo&&ed.movedTo.date===dateKey){
+          result.push(Object.assign({},s,{
+            time:ed.movedTo.time||ed.time||s.time,
+            time2:ed.movedTo.time2||ed.time2||s.time2||'',
+            _originalIdx:originalIdx,
+            _isRescheduled:true,
+            _isExtra:false,
+            _extraIdx:ei,
+            _attKey:extraAttKey,
+            _extraDate:ed.movedTo.date
+          }));
+        }
       });
     }
   });
@@ -4894,16 +4942,42 @@ function closeDeleteConfirm(){
 }
 
 // ── RESCHEDULE ─────────────────────────────────────────
-let _rsName=null, _rsDay=null, _rsIdx=null;
+let _rsName=null, _rsDay=null, _rsIdx=null, _rsExtraIdx=null;
 
-function openRescheduleModal(name, day, idx){
+function openRescheduleModal(name, day, idx, extraIdx, extraDate){
   _rsName=name; _rsDay=day; _rsIdx=idx;
+  _rsExtraIdx=(extraIdx!==undefined&&extraIdx!==null&&extraIdx!==-1&&extraIdx!=='null')?extraIdx:null;
   const s=students[idx]||{};
+  const clearBtn=document.getElementById('rsClearBtn');
+  const curInfo=document.getElementById('rs_current');
+
+  if(_rsExtraIdx!==null){
+    // Mode: reschedule sesi Jadwal Tambahan — kartu asal tetap tampil dengan indikator "Pindah ke..."
+    const ed=(s.extraDates||[])[_rsExtraIdx]||{};
+    document.getElementById('rescheduleSubtitle').textContent=name+' · Sesi Tambahan'+(ed.time?' '+ed.time:'');
+    if(ed.movedTo&&ed.movedTo.date){
+      document.getElementById('rs_date').value=ed.movedTo.date||'';
+      document.getElementById('rs_time').value=ed.movedTo.time||ed.time||'';
+      document.getElementById('rs_time2').value=ed.movedTo.time2||ed.time2||'';
+      clearBtn.style.display='';
+      curInfo.style.display='block';
+      const d=new Date(ed.movedTo.date+'T00:00:00');
+      const dn=['Min','Sen','Sel','Rab','Kam','Jum','Sab'][d.getDay()];
+      curInfo.textContent='Reschedule aktif: '+dn+', '+d.getDate()+'/'+(d.getMonth()+1)+(ed.movedTo.time?' · '+ed.movedTo.time+(ed.movedTo.time2?'–'+ed.movedTo.time2:''):'');
+    } else {
+      document.getElementById('rs_date').value='';
+      document.getElementById('rs_time').value=ed.time||s.time||'';
+      document.getElementById('rs_time2').value=ed.time2||s.time2||'';
+      clearBtn.style.display='none';
+      curInfo.style.display='none';
+    }
+    document.getElementById('rescheduleOverlay').classList.add('open');
+    return;
+  }
+
   document.getElementById('rescheduleSubtitle').textContent=name+' · Jadwal '+day+(s.time?' '+s.time:'');
   // Cek apakah sudah ada reschedule untuk hari ini
   const existing=(s.reschedules||[]).find(r=>r.day===day);
-  const clearBtn=document.getElementById('rsClearBtn');
-  const curInfo=document.getElementById('rs_current');
   if(existing){
     document.getElementById('rs_date').value=existing.date||'';
     document.getElementById('rs_time').value=existing.time||'';
@@ -4925,7 +4999,7 @@ function openRescheduleModal(name, day, idx){
 
 function closeRescheduleModal(){
   document.getElementById('rescheduleOverlay').classList.remove('open');
-  _rsName=null; _rsDay=null; _rsIdx=null;
+  _rsName=null; _rsDay=null; _rsIdx=null; _rsExtraIdx=null;
 }
 
 function saveReschedule(){
@@ -4935,6 +5009,20 @@ function saveReschedule(){
   const time2=document.getElementById('rs_time2').value;
   const s=students[_rsIdx];
   if(!s) return;
+  const d=new Date(date+'T00:00:00');
+  const dn=['Min','Sen','Sel','Rab','Kam','Jum','Sab'][d.getDay()];
+
+  if(_rsExtraIdx!==null){
+    // Sesi Jadwal Tambahan: simpan sebagai "movedTo" — kartu asal tetap tampil dengan indikator pindah
+    if(!s.extraDates||!s.extraDates[_rsExtraIdx]){ toast('❌ Sesi tambahan tidak ditemukan'); return; }
+    s.extraDates[_rsExtraIdx].movedTo={date:date, time:time, time2:time2};
+    save();
+    closeRescheduleModal();
+    render();
+    toast('✅ Sesi tambahan '+_rsName+' dipindah ke '+dn+', '+d.getDate()+'/'+(d.getMonth()+1));
+    return;
+  }
+
   if(!s.reschedules) s.reschedules=[];
   // Hapus reschedule lama untuk hari ini jika ada
   s.reschedules=s.reschedules.filter(r=>r.day!==_rsDay);
@@ -4943,14 +5031,20 @@ function saveReschedule(){
   save();
   closeRescheduleModal();
   render();
-  const d=new Date(date+'T00:00:00');
-  const dn=['Min','Sen','Sel','Rab','Kam','Jum','Sab'][d.getDay()];
   toast('✅ '+_rsName+' direschedule ke '+dn+', '+d.getDate()+'/'+(d.getMonth()+1));
 }
 
 function clearReschedule(){
   const s=students[_rsIdx];
   if(!s) return;
+  if(_rsExtraIdx!==null){
+    if(s.extraDates&&s.extraDates[_rsExtraIdx]) delete s.extraDates[_rsExtraIdx].movedTo;
+    save();
+    closeRescheduleModal();
+    render();
+    toast('✅ Reschedule sesi tambahan '+_rsName+' dihapus');
+    return;
+  }
   s.reschedules=(s.reschedules||[]).filter(r=>r.day!==_rsDay);
   save();
   closeRescheduleModal();
