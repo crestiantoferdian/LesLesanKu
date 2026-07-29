@@ -658,11 +658,29 @@ body{
       <label>📝 Catatan Progress / Materi Hari Ini</label>
       <textarea id="noteProgress" rows="4" placeholder="cth: Sudah sampai halaman 12, latihan tangga nada C mayor, PR: ulangi bar 5-8..."></textarea>
     </div>
+    <div class="mfield" id="notePhotoWrap">
+      <label>📷 Foto Progress (opsional)</label>
+      <div id="notePhotoPreviewBox" style="display:none;position:relative;margin-bottom:8px">
+        <img id="notePhotoPreviewImg" src="" style="width:100%;max-height:220px;object-fit:cover;border-radius:12px;border:1px solid var(--border);display:block"/>
+        <button type="button" onclick="removeNotePhoto()" style="position:absolute;top:8px;right:8px;width:30px;height:30px;border-radius:50%;background:rgba(0,0,0,0.6);color:#fff;border:none;font-size:1rem;font-weight:700;cursor:pointer;line-height:1">✕</button>
+      </div>
+      <div id="notePhotoBtnRow" style="display:flex;gap:8px">
+        <button type="button" onclick="document.getElementById('notePhotoCameraInput').click()" style="flex:1;padding:11px;background:var(--blue-bg);color:var(--blue);border:1px solid rgba(37,99,235,0.3);border-radius:11px;font-family:sans-serif;font-size:0.82rem;font-weight:700;cursor:pointer">📷 Ambil Foto</button>
+        <button type="button" onclick="document.getElementById('notePhotoGalleryInput').click()" style="flex:1;padding:11px;background:var(--card2);color:var(--text);border:1px solid var(--border);border-radius:11px;font-family:sans-serif;font-size:0.82rem;font-weight:700;cursor:pointer">🖼️ Galeri</button>
+      </div>
+      <input type="file" id="notePhotoCameraInput" accept="image/*" capture="environment" style="display:none" onchange="loadNotePhoto(this)"/>
+      <input type="file" id="notePhotoGalleryInput" accept="image/*" style="display:none" onchange="loadNotePhoto(this)"/>
+    </div>
     <div class="mactions">
       <button class="mbtn mbtn-cancel" onclick="closeNoteModal()">Batal</button>
       <button class="mbtn mbtn-save" onclick="saveNote()">💾 Simpan</button>
     </div>
   </div>
+</div>
+
+<!-- PHOTO LIGHTBOX -->
+<div class="overlay" id="photoLightboxOverlay" onclick="closePhotoLightbox()" style="background:rgba(0,0,0,0.9);align-items:center;justify-content:center">
+  <img id="photoLightboxImg" src="" style="max-width:94vw;max-height:88vh;border-radius:12px;object-fit:contain"/>
 </div>
 
 <!-- LINK MODAL -->
@@ -763,6 +781,7 @@ let currentTab='absensi';
 let selectedDay='';
 let editIdx=null;
 let noteStudent=null;
+let notePhotoData=null; // base64 foto progress (sudah dikompres) untuk modal catatan yang sedang dibuka
 let trackPeriod='bulan';
 let incomeHidden=localStorage.getItem('llk_income_hidden')==='1';
 let incomeProjection=false;
@@ -1116,6 +1135,10 @@ window.addEventListener('popstate',function(e){
   const nov=document.getElementById('noteOverlay');
   const rov=document.getElementById('rescheduleOverlay');
   const lov=document.getElementById('linkOverlay');
+  const pov=document.getElementById('photoLightboxOverlay');
+  if(pov&&pov.classList.contains('open')){
+    pov.classList.remove('open'); return;
+  }
   if(ov&&ov.classList.contains('open')){
     closeModal(); history.pushState({tab:currentTab,view:'main'},''); return;
   }
@@ -1352,7 +1375,7 @@ function renderAbsensi(){
           ${isRescued?`<span class="s-pill rescue-pill">🔄 Reschedule</span>`:''}
           ${s._isExtra?`<span class="s-pill" style="background:#eef2ff;color:var(--blue);border-color:rgba(37,99,235,0.3)">➕ ${s._extraNote||'Tambahan Kelas'}</span>`:''}
         </div>
-        ${note.progress?`<div class="s-note-preview">📝 ${note.progress}</div>`:''}
+        ${note.progress?`<div class="s-note-preview">📝 ${note.progress}${note.photo?' 📷':''}</div>`:(note.photo?`<div class="s-note-preview">📷 Ada foto progress</div>`:'')}
         ${showPayWarn?`<div class="pay-warn" onclick="sendPaymentWA('${s.name}')">${payWarnLabel}</div>`:''}
         <div class="att-btns" onclick="event.stopPropagation()">
             ${samedayRs
@@ -1726,6 +1749,8 @@ function openNoteModal(attKey, status, displayName, dateOverride){
     const existing=attNotes[noteKey]||{};
     document.getElementById('noteReason').value=existing.reason||'';
     document.getElementById('noteProgress').value=existing.progress||'';
+    notePhotoData=existing.photo||null;
+    renderNotePhotoPreview();
     onNoteStatusChange();
     document.getElementById('noteOverlay').classList.add('open');
     setTimeout(function(){
@@ -1744,7 +1769,74 @@ function onNoteStatusChange(){
   document.getElementById('noteProgressWrap').style.display=st!=='alpa'?'flex':'none';
 }
 
-function closeNoteModal(){document.getElementById('noteOverlay').classList.remove('open');noteStudent=null}
+function closeNoteModal(){document.getElementById('noteOverlay').classList.remove('open');noteStudent=null;notePhotoData=null;}
+
+// ── FOTO PROGRESS (kamera/galeri) ──────────────────────
+// Kompres foto ke max 900px & JPEG q0.72 biar hemat localStorage (bisa banyak foto tanpa bikin penuh)
+function compressImageToDataURL(file, maxDim, quality){
+  return new Promise((resolve, reject)=>{
+    const reader=new FileReader();
+    reader.onerror=()=>reject(new Error('Gagal membaca file'));
+    reader.onload=(e)=>{
+      const img=new Image();
+      img.onerror=()=>reject(new Error('Gagal memuat gambar'));
+      img.onload=()=>{
+        let w=img.width, h=img.height;
+        if(w>h&&w>maxDim){ h=Math.round(h*maxDim/w); w=maxDim; }
+        else if(h>=w&&h>maxDim){ w=Math.round(w*maxDim/h); h=maxDim; }
+        const canvas=document.createElement('canvas');
+        canvas.width=w; canvas.height=h;
+        canvas.getContext('2d').drawImage(img,0,0,w,h);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+      img.src=e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+function loadNotePhoto(input){
+  const file=input.files[0];
+  if(!file) return;
+  if(!file.type.startsWith('image/')){ toast('❌ File harus berupa gambar'); input.value=''; return; }
+  toast('⏳ Memproses foto...');
+  compressImageToDataURL(file, 900, 0.72).then(dataUrl=>{
+    notePhotoData=dataUrl;
+    renderNotePhotoPreview();
+    toast('✅ Foto ditambahkan');
+  }).catch(err=>{
+    console.error('compressImageToDataURL error:',err);
+    toast('❌ Gagal memproses foto');
+  }).finally(()=>{ input.value=''; });
+}
+function removeNotePhoto(){
+  notePhotoData=null;
+  document.getElementById('notePhotoCameraInput').value='';
+  document.getElementById('notePhotoGalleryInput').value='';
+  renderNotePhotoPreview();
+}
+function renderNotePhotoPreview(){
+  const box=document.getElementById('notePhotoPreviewBox');
+  const img=document.getElementById('notePhotoPreviewImg');
+  if(notePhotoData){
+    img.src=notePhotoData;
+    box.style.display='block';
+  }else{
+    img.src='';
+    box.style.display='none';
+  }
+}
+function openPhotoLightbox(src){
+  document.getElementById('photoLightboxImg').src=src;
+  history.pushState({tab:currentTab, view:'modal'},'');
+  document.getElementById('photoLightboxOverlay').classList.add('open');
+}
+function closePhotoLightbox(){
+  const ov=document.getElementById('photoLightboxOverlay');
+  if(ov.classList.contains('open')){
+    ov.classList.remove('open');
+    if(history.state&&history.state.view==='modal') history.back();
+  }
+}
 
 // ── KONFIRMASI RESET KEHADIRAN ──────────────────────────
 function showConfirmReset(msg){
@@ -1802,6 +1894,8 @@ function openTrackEditModal(attKey, status, displayName, dateKey){
     const existing=attNotes[noteKey]||{};
     document.getElementById('noteReason').value=existing.reason||'';
     document.getElementById('noteProgress').value=existing.progress||'';
+    notePhotoData=existing.photo||null;
+    renderNotePhotoPreview();
     onNoteStatusChange();
     document.getElementById('noteOverlay').classList.add('open');
     setTimeout(function(){
@@ -1828,7 +1922,7 @@ function saveNote(){
     // Simpan timestamp saat diabsen untuk sort "Terbaru"
     localStorage.setItem('llk_ts_'+dateKey+'_'+studentName, Date.now().toString());
     const noteKey=dateKey+'_'+studentName;
-    if(reason||progress) attNotes[noteKey]={reason:reason,progress:progress};
+    if(reason||progress||notePhotoData) attNotes[noteKey]={reason:reason,progress:progress,photo:notePhotoData||null};
     else delete attNotes[noteKey];
     save();closeNoteModal();
     if(noteStudent&&noteStudent.fromTrack){
@@ -2228,7 +2322,7 @@ function renderStudentProfile(name, period){
             }
           }
         }
-        if(!st&&!note.progress&&!note.reason) return '';
+        if(!st&&!note.progress&&!note.reason&&!note.photo) return '';
         const stLabel = st==='hadir'?'✅ Hadir':st==='izin'?'✋ Izin':st==='alpa'?'✗ Alpa':'';
         const stColor = st==='hadir'?'var(--hadir)':st==='izin'?'var(--izin)':'var(--alpa)';
         const safeName2=name.replace(/'/g,"\\'");
@@ -2248,6 +2342,7 @@ function renderStudentProfile(name, period){
           +'</div>'
           +(note.reason?'<div style="font-size:0.82rem;color:var(--text);background:#fffbeb;border-radius:9px;padding:8px 11px;margin-top:5px;border-left:3px solid var(--izin)">📋 '+note.reason+'</div>':'')
           +(note.progress?'<div style="font-size:0.82rem;color:var(--text);background:var(--blue-bg);border-radius:9px;padding:8px 11px;margin-top:6px;border-left:3px solid var(--blue)">📝 '+note.progress+'</div>':'')
+          +(note.photo?'<img src="'+note.photo+'" onclick="openPhotoLightbox(\''+note.photo.replace(/'/g,"\\'")+'\')" style="width:100%;max-height:180px;object-fit:cover;border-radius:10px;margin-top:8px;cursor:pointer"/>':'')
           +'</div>';
       }).filter(Boolean).join('')
     : '<div class="empty"><div class="empty-icon">📋</div><div class="empty-t">Tidak ada data</div><div class="empty-d">Tidak ada catatan di periode ini</div></div>';
@@ -3085,7 +3180,8 @@ function renderHistoryDetail(){
       </div>
       ${note.reason?`<div class="hist-note">📋 ${note.reason}</div>`:''}
       ${note.progress?`<div class="hist-note" style="margin-top:6px;border-left:3px solid var(--blue);padding-left:10px">📝 ${note.progress}</div>`:''}
-      ${!note.reason&&!note.progress?`<div class="hist-no-note">Tidak ada catatan</div>`:''}
+      ${note.photo?`<img src="${note.photo}" onclick="openPhotoLightbox('${note.photo.replace(/'/g,"\\'")}')" style="width:100%;max-height:180px;object-fit:cover;border-radius:10px;margin-top:8px;cursor:pointer"/>`:''}
+      ${!note.reason&&!note.progress&&!note.photo?`<div class="hist-no-note">Tidak ada catatan</div>`:''}
     </div>`;
   }).join(''):`<div class="empty"><div class="empty-icon">📋</div><div class="empty-t">Belum ada histori</div><div class="empty-d">Mulai absen murid ini untuk melihat histori</div></div>`;
 
