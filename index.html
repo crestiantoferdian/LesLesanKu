@@ -476,6 +476,10 @@ body{
   </div>
 </div>
 
+<div id="offlineBanner" style="display:none;background:#fff3cd;color:#92400e;font-size:0.78rem;font-weight:700;text-align:center;padding:9px 12px;border-bottom:1px solid #f5d789">
+  ⚠️ Internet mati — sehingga aplikasi bisa berjalan tidak semestinya (tombol/data mungkin tidak sesuai). Sambungkan internet & refresh untuk memuat versi terbaru.
+</div>
+
 <div id="mainContent"></div>
 
 <div class="bottom-nav">
@@ -1137,6 +1141,55 @@ document.getElementById('overlay').addEventListener('click',e=>{if(e.target===do
 document.getElementById('noteOverlay').addEventListener('click',e=>{if(e.target===document.getElementById('noteOverlay'))closeNoteModal()});
 document.getElementById('linkOverlay').addEventListener('click',e=>{if(e.target===document.getElementById('linkOverlay'))closeLinkModal()});
 history.replaceState({tab:'absensi',view:'main'},'');
+
+// ── STATUS KONEKSI INTERNET ─────────────────────────────
+// Aplikasi ini 100% berjalan lokal di HP (localStorage) — internet TIDAK dibutuhkan untuk menyimpan data,
+// tapi banner ini tetap kasih tahu user biar tenang & sadar posisi koneksinya.
+function updateOfflineBanner(){
+  const banner=document.getElementById('offlineBanner');
+  if(!banner) return;
+  banner.style.display=navigator.onLine?'none':'block';
+}
+window.addEventListener('online', function(){
+  updateOfflineBanner();
+  toast('✅ Internet nyambung lagi — sebaiknya refresh halaman biar aplikasi kembali normal');
+});
+window.addEventListener('offline', function(){
+  updateOfflineBanner();
+  toast('⚠️ Internet mati — sehingga aplikasi bisa berjalan tidak semestinya');
+});
+updateOfflineBanner();
+
+// ── PENGAMAN CATATAN BELUM DISIMPAN ────────────────────
+// Kalau modal Catatan/Absensi sedang terbuka lalu tab/app ditutup atau di-refresh tanpa tekan Simpan,
+// browser akan tanya konfirmasi dulu — supaya progress yang lagi diketik tidak hilang percuma.
+window.addEventListener('beforeunload', function(e){
+  const nov=document.getElementById('noteOverlay');
+  if(nov&&nov.classList.contains('open')){
+    e.preventDefault();
+    e.returnValue='';
+  }
+});
+
+// Jam selesai otomatis terisi 45 menit setelah jam mulai — tetap bisa diedit manual kapan saja
+function autofillEndTime(startId, endId, minutes){
+  minutes=minutes||45;
+  const startEl=document.getElementById(startId);
+  const endEl=document.getElementById(endId);
+  if(!startEl||!endEl) return;
+  startEl.addEventListener('change', function(){
+    if(!this.value) return;
+    const parts=this.value.split(':');
+    const h=parseInt(parts[0],10), m=parseInt(parts[1],10);
+    let total=((h*60+m+minutes)%1440+1440)%1440;
+    const eh=String(Math.floor(total/60)).padStart(2,'0');
+    const em=String(total%60).padStart(2,'0');
+    endEl.value=eh+':'+em;
+  });
+}
+[['f_time','f_time2'],['f_time2a','f_time2b'],['f_time3a','f_time3b'],['f_time4a','f_time4b'],['rs_time','rs_time2']]
+  .forEach(pair=>autofillEndTime(pair[0],pair[1],45));
+
 render();
 
 // ── TOMBOL BACK HP ─────────────────────────────────────
@@ -4203,6 +4256,18 @@ function addExtraDate(){
   extraDates.push({id:'ex_'+Date.now()+'_'+Math.random().toString(36).slice(2,7),date:'',time:'',time2:'',attended:false});
   renderExtraDates();
 }
+// Jam selesai otomatis +45 menit dari jam mulai (baris Jadwal Tambahan) — tetap bisa diedit manual
+function onExtraTimeChange(i, val){
+  extraDates[i].time=val;
+  if(!val) return;
+  const parts=val.split(':');
+  const h=parseInt(parts[0],10), m=parseInt(parts[1],10);
+  const total=((h*60+m+45)%1440+1440)%1440;
+  const endVal=String(Math.floor(total/60)).padStart(2,'0')+':'+String(total%60).padStart(2,'0');
+  extraDates[i].time2=endVal;
+  const endEl=document.getElementById('extraTime2_'+i);
+  if(endEl) endEl.value=endVal;
+}
 
 function removeExtraDate(i){
   const ed=extraDates[i];
@@ -4252,13 +4317,13 @@ function renderExtraDates(){
         </div>
         <div>
           <div style="font-size:0.65rem;font-weight:700;color:var(--muted);margin-bottom:3px">JAM MULAI</div>
-          <input type="time" value="${ed.time||''}" onchange="extraDates[${i}].time=this.value"
+          <input type="time" value="${ed.time||''}" onchange="onExtraTimeChange(${i},this.value)"
             style="width:100%;background:var(--card);border:1.5px solid var(--border);color:var(--text);
             font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:0.78rem;padding:7px 8px;border-radius:8px;outline:none"/>
         </div>
         <div>
           <div style="font-size:0.65rem;font-weight:700;color:var(--muted);margin-bottom:3px">JAM SELESAI</div>
-          <input type="time" value="${ed.time2||''}" onchange="extraDates[${i}].time2=this.value"
+          <input type="time" id="extraTime2_${i}" value="${ed.time2||''}" onchange="extraDates[${i}].time2=this.value"
             style="width:100%;background:var(--card);border:1.5px solid var(--border);color:var(--text);
             font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:0.78rem;padding:7px 8px;border-radius:8px;outline:none"/>
         </div>
