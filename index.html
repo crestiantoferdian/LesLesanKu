@@ -1187,8 +1187,12 @@ function autofillEndTime(startId, endId, minutes){
     endEl.value=eh+':'+em;
   });
 }
-[['f_time','f_time2'],['f_time2a','f_time2b'],['f_time3a','f_time3b'],['f_time4a','f_time4b'],['rs_time','rs_time2']]
-  .forEach(pair=>autofillEndTime(pair[0],pair[1],45));
+// Dibungkus DOMContentLoaded supaya tetap kepasang biarpun elemen inputnya
+// posisinya di HTML ada SETELAH baris script ini (kasus modal Reschedule)
+document.addEventListener('DOMContentLoaded', function(){
+  [['f_time','f_time2'],['f_time2a','f_time2b'],['f_time3a','f_time3b'],['f_time4a','f_time4b'],['rs_time','rs_time2']]
+    .forEach(pair=>autofillEndTime(pair[0],pair[1],45));
+});
 
 render();
 
