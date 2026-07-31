@@ -5010,6 +5010,10 @@ function closeDeleteConfirm(){
 let _rsName=null, _rsDay=null, _rsIdx=null, _rsExtraIdx=null;
 
 function openRescheduleModal(name, day, idx, extraIdx, extraDate){
+  if(!name||name==='null'||name==='undefined'||idx===null||idx===undefined||!students[idx]){
+    toast('❌ Data siswa tidak ditemukan, coba refresh halaman dulu');
+    return;
+  }
   _rsName=name; _rsDay=day; _rsIdx=idx;
   _rsExtraIdx=(extraIdx!==undefined&&extraIdx!==null&&extraIdx!==-1&&extraIdx!=='null')?extraIdx:null;
   const s=students[idx]||{};
@@ -5074,6 +5078,7 @@ function saveReschedule(){
   const time2=document.getElementById('rs_time2').value;
   const s=students[_rsIdx];
   if(!s) return;
+  const displayName=s.name||_rsName||'Siswa';
   const d=new Date(date+'T00:00:00');
   const dn=['Min','Sen','Sel','Rab','Kam','Jum','Sab'][d.getDay()];
 
@@ -5084,7 +5089,7 @@ function saveReschedule(){
     save();
     closeRescheduleModal();
     render();
-    toast('✅ Sesi tambahan '+_rsName+' dipindah ke '+dn+', '+d.getDate()+'/'+(d.getMonth()+1));
+    toast('✅ Sesi tambahan '+displayName+' dipindah ke '+dn+', '+d.getDate()+'/'+(d.getMonth()+1));
     return;
   }
 
@@ -5096,25 +5101,26 @@ function saveReschedule(){
   save();
   closeRescheduleModal();
   render();
-  toast('✅ '+_rsName+' direschedule ke '+dn+', '+d.getDate()+'/'+(d.getMonth()+1));
+  toast('✅ '+displayName+' direschedule ke '+dn+', '+d.getDate()+'/'+(d.getMonth()+1));
 }
 
 function clearReschedule(){
   const s=students[_rsIdx];
   if(!s) return;
+  const displayName=s.name||_rsName||'Siswa';
   if(_rsExtraIdx!==null){
     if(s.extraDates&&s.extraDates[_rsExtraIdx]) delete s.extraDates[_rsExtraIdx].movedTo;
     save();
     closeRescheduleModal();
     render();
-    toast('✅ Reschedule sesi tambahan '+_rsName+' dihapus');
+    toast('✅ Reschedule sesi tambahan '+displayName+' dihapus');
     return;
   }
   s.reschedules=(s.reschedules||[]).filter(r=>r.day!==_rsDay);
   save();
   closeRescheduleModal();
   render();
-  toast('✅ Reschedule '+_rsName+' dihapus');
+  toast('✅ Reschedule '+displayName+' dihapus');
 }
 
 </script>
