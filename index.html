@@ -630,6 +630,11 @@ body{
         </div>
       </div>
     </div>
+    <div class="mfield" id="inactiveSinceWrap" style="display:none">
+      <label>Nonaktif Sejak Tanggal</label>
+      <input type="date" id="f_inactiveSince"/>
+      <div style="font-size:0.7rem;color:var(--muted);margin-top:4px;line-height:1.4">Jadwal siswa ini akan hilang dari Kalender mulai tanggal ini dan seterusnya. Riwayat kehadiran sebelum tanggal ini tetap tersimpan.</div>
+    </div>
     <div class="mactions">
       <button class="mbtn mbtn-cancel" onclick="closeModal()">Batal</button>
       <button class="mbtn mbtn-del" id="inactiveToggleBtn" onclick="toggleInactiveFromModal()" style="display:none"></button>
@@ -2696,10 +2701,17 @@ function buildDateDetail(dk){
   const d=new Date(dk+'T00:00:00');
   const dayName=DAYS[DAYS_JS.indexOf(d.getDay())];
 
-  // Siswa nonaktif HANYA disertakan untuk tanggal SEBELUM hari ini (riwayat murni).
-  // Hari ini & tanggal mendatang tetap dianggap "jadwal ke depan" — nonaktif hilang.
+  // Siswa nonaktif HANYA disertakan untuk tanggal SEBELUM tanggal dia dinonaktifkan
+  // (riwayat murni saat dia masih aktif les). Setelah tanggal nonaktif, jadwalnya
+  // hilang dari Kalender — tapi kalau ternyata ada absensi nyata (hadir/izin/alpa)
+  // di tanggal itu, tetap dipulihkan lewat blok "riwayat yatim" di bawah.
   const isPast=dk<todayStr();
-  const scheduled=getStudentsForDay(dayName, dk, isPast).sort((a,b)=>a.time.localeCompare(b.time));
+  let scheduled=getStudentsForDay(dayName, dk, isPast).sort((a,b)=>a.time.localeCompare(b.time));
+  scheduled=scheduled.filter(s=>{
+    if(!s.inactive) return true;
+    if(!s.inactiveSince) return true; // data lama tanpa tanggal nonaktif — biarkan seperti semula
+    return dk<s.inactiveSince; // hanya tampil kalau tanggalnya SEBELUM dia dinonaktifkan
+  });
 
   // ── Pulihkan riwayat "yatim" ──────────────────────────
   // Kalau jadwal (hari kedua/reschedule/tambahan kelas) sudah diubah/dihapus
@@ -4216,6 +4228,13 @@ function openEdit(idx){
   inactiveBtn.style.setProperty('border',s.inactive?'1.5px solid rgba(45,138,94,0.3)':'1.5px solid rgba(217,119,6,0.3)','important');
   inactiveBtn.style.color=s.inactive?'var(--hadir)':'#b45309';
   document.getElementById('inactiveHint').style.display='block';
+  const inactiveSinceWrap=document.getElementById('inactiveSinceWrap');
+  if(s.inactive){
+    inactiveSinceWrap.style.display='block';
+    document.getElementById('f_inactiveSince').value=s.inactiveSince||'';
+  }else{
+    inactiveSinceWrap.style.display='none';
+  }
   document.getElementById('f_name').value=s.name;
   document.getElementById('f_inst').value=s.instrument||'';
   document.getElementById('f_day').value=s.day;
@@ -4371,7 +4390,11 @@ function doSave(){
     // Preserve lastPaidAt agar siklus bayar tidak hilang saat edit
     if(students[editIdx].lastPaidAt) s.lastPaidAt=students[editIdx].lastPaidAt;
     // Preserve status nonaktif agar tidak ke-reset saat form disimpan
-    if(students[editIdx].inactive) s.inactive=true;
+    if(students[editIdx].inactive){
+      s.inactive=true;
+      const manualDate=document.getElementById('f_inactiveSince')?document.getElementById('f_inactiveSince').value:'';
+      s.inactiveSince=manualDate||students[editIdx].inactiveSince||todayStr();
+    }
     students[editIdx]=s;
   } else students.push(s);
   save();closeModal();render();
@@ -4386,6 +4409,7 @@ function toggleInactiveFromModal(){
   // Aktifkan kembali tidak perlu konfirmasi, langsung jalan
   if(s.inactive){
     s.inactive=false;
+    delete s.inactiveSince;
     save();
     closeModal();
     render();
@@ -4415,6 +4439,7 @@ function toggleInactiveFromModal(){
   // Konfirmasi kedua kali — eksekusi
   btn.dataset.confirm='';
   s.inactive=true;
+  s.inactiveSince=todayStr(); // tandai tanggal nonaktif, dipakai buat sembunyikan jadwal SETELAH tanggal ini di Kalender
   save();
   closeModal();
   render();
@@ -4425,6 +4450,7 @@ function reactivateStudent(name){
   const s=students.find(x=>x.name===name);
   if(!s) return;
   s.inactive=false;
+  delete s.inactiveSince;
   save();
   render();
   toast(`▶️ ${name} diaktifkan kembali`);
