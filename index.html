@@ -659,6 +659,18 @@ body{
         <option value="alpa">✗  Alpa</option>
       </select>
     </div>
+    <div style="margin-bottom:14px">
+      <div onclick="toggleNoteTimeEdit()" style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:0.76rem;color:var(--blue);font-weight:700">
+        <span id="noteTimeToggleIcon">▸</span> Jam sesi ini salah? Perbaiki di sini
+      </div>
+      <div id="noteTimeEditWrap" style="display:none;margin-top:8px">
+        <div style="font-size:0.7rem;color:var(--muted);margin-bottom:6px;line-height:1.4">Jam khusus untuk riwayat tanggal ini saja — tidak mengubah jadwal rutin siswa.</div>
+        <div style="display:flex;gap:10px">
+          <div class="mfield" style="flex:1;margin-bottom:0"><label>Jam Mulai</label><input type="time" id="noteTimeInput"/></div>
+          <div class="mfield" style="flex:1;margin-bottom:0"><label>Jam Selesai</label><input type="time" id="noteTime2Input"/></div>
+        </div>
+      </div>
+    </div>
     <div class="mfield" id="noteReasonWrap">
       <label>Alasan / Keterangan</label>
       <textarea id="noteReason" rows="3" placeholder="Sakit, acara keluarga, dll..."></textarea>
@@ -786,6 +798,8 @@ function getInstrumentIcon(instrument){
 let students=[];
 let attendance={};       // {dateKey: {name: 'hadir'|'izin'|'alpa'}}
 let attNotes={};         // {dateKey_name: {reason, progress}}
+let attMeta={};          // {dateKey_attKey: {time,time2}} — snapshot jam jadwal SAAT absen ditandai,
+                          // supaya riwayat lama tidak ikut berubah kalau jadwal siswa diedit belakangan
 let currentTab='absensi';
 let selectedDay='';
 let editIdx=null;
@@ -850,12 +864,14 @@ function save(){
   localStorage.setItem('rms4_s',JSON.stringify(students));
   localStorage.setItem('rms4_a',JSON.stringify(attendance));
   localStorage.setItem('rms4_n',JSON.stringify(attNotes));
+  localStorage.setItem('rms4_meta',JSON.stringify(attMeta));
   localStorage.setItem('rms4_links',JSON.stringify(quickLinks));
 }
 function loadStorage(){
   try{students=JSON.parse(localStorage.getItem('rms4_s')||'[]');}catch(e){students=[];}
   try{attendance=JSON.parse(localStorage.getItem('rms4_a')||'{}');}catch(e){attendance={};}
   try{attNotes=JSON.parse(localStorage.getItem('rms4_n')||'{}');}catch(e){attNotes={};}
+  try{attMeta=JSON.parse(localStorage.getItem('rms4_meta')||'{}');}catch(e){attMeta={};}
   try{quickLinks=JSON.parse(localStorage.getItem('rms4_links')||'[]');}catch(e){quickLinks=[];}
   // Migrasi data lama: rescueDay/rescueUntil → reschedules array
   let migrated=false;
@@ -1456,9 +1472,9 @@ function renderAbsensi(){
         <div class="att-btns" onclick="event.stopPropagation()">
             ${samedayRs
               ? `<div style="font-size:0.75rem;color:#7c3aed;font-weight:600;padding:6px 8px;background:#f5f3ff;border-radius:8px;border:1.5px solid #ddd6fe">🔒 Jadwal dipindah ke jam ${samedayRs.time}${samedayRs.time2?'–'+samedayRs.time2:''}</div>`
-              : `<button class="att-btn a-hadir ${status==='hadir'?'on':''}" onclick="openNoteModal('${attKey}','hadir','${s.name}','${attDateKey}')">✅</button>
-            <button class="att-btn a-izin ${status==='izin'?'on':''}" onclick="openNoteModal('${attKey}','izin','${s.name}','${attDateKey}')">✋</button>
-            <button class="att-btn a-alpa ${status==='alpa'?'on':''}" onclick="openNoteModal('${attKey}','alpa','${s.name}','${attDateKey}')">✗</button>
+              : `<button class="att-btn a-hadir ${status==='hadir'?'on':''}" onclick="openNoteModal('${attKey}','hadir','${s.name}','${attDateKey}','${s.time||''}','${s.time2||''}')">✅</button>
+            <button class="att-btn a-izin ${status==='izin'?'on':''}" onclick="openNoteModal('${attKey}','izin','${s.name}','${attDateKey}','${s.time||''}','${s.time2||''}')">✋</button>
+            <button class="att-btn a-alpa ${status==='alpa'?'on':''}" onclick="openNoteModal('${attKey}','alpa','${s.name}','${attDateKey}','${s.time||''}','${s.time2||''}')">✗</button>
             <button class="att-btn" onclick="openRescheduleModal('${s.name}','${s.day}',${sidx},${s._isExtra?s._extraIdx:'null'},'${s._isExtra?s._extraDate:''}');event.stopPropagation()" title="Reschedule" style="${(s._hasActiveReschedule||s._isRescheduled)?'background:#fef3c7;border-color:#f59e0b;color:#d97706;font-weight:700':''}">🔄</button>`
             }
             ${s.sheetLink&&status!=='izin'?`<button class="att-btn sheet-btn-${sidx}" onclick="openSheetLinkByName('${s.name.replace(/'/g,"\'")}','${attDateKey}')" style="${localStorage.getItem('sheet_sent_'+attDateKey+'_'+s.name.replace(/[^a-zA-Z0-9]/g,'_'))?'background:#eafaf1;border-color:rgba(29,158,78,0.4)':'background:var(--blue-bg);border-color:rgba(0,113,227,0.3)'}">
@@ -1830,7 +1846,7 @@ function sendPaymentWA(name){
 }
 
 // ── ATTENDANCE NOTE MODAL ─────────────────────────────
-function openNoteModal(attKey, status, displayName, dateOverride){
+function openNoteModal(attKey, status, displayName, dateOverride, timeOverride, time2Override){
   try{
     const name=displayName||attKey;
     const dateKey=dateOverride||todayStr();
@@ -1851,9 +1867,15 @@ function openNoteModal(attKey, status, displayName, dateOverride){
       return;
     }
     const s=students.find(x=>x.name===name)||{};
-    noteStudent={name:attKey,displayName:name,status:status,dateKey:dateKey};
+    const snapTime=timeOverride||s.time||'';
+    const snapTime2=time2Override||s.time2||'';
+    noteStudent={name:attKey,displayName:name,status:status,dateKey:dateKey,time:snapTime,time2:snapTime2};
     document.getElementById('noteTitle').textContent=status==='hadir'?'Catat Kehadiran':status==='izin'?'Catat Izin':'Catat Alpa';
-    document.getElementById('noteSub').textContent=name+(s.time?' · '+s.time+(s.time2?'–'+s.time2:''):'');
+    document.getElementById('noteSub').textContent=name+(snapTime?' · '+snapTime+(snapTime2?'–'+snapTime2:''):'');
+    document.getElementById('noteTimeInput').value=snapTime;
+    document.getElementById('noteTime2Input').value=snapTime2;
+    document.getElementById('noteTimeEditWrap').style.display='none';
+    document.getElementById('noteTimeToggleIcon').textContent='▸';
     document.getElementById('noteStatus').value=status;
     const noteKey=dateKey+'_'+name;
     const existing=attNotes[noteKey]||{};
@@ -1877,6 +1899,13 @@ function onNoteStatusChange(){
   const st=document.getElementById('noteStatus').value;
   document.getElementById('noteReasonWrap').style.display=st==='hadir'?'none':'flex';
   document.getElementById('noteProgressWrap').style.display=st!=='alpa'?'flex':'none';
+}
+function toggleNoteTimeEdit(){
+  const wrap=document.getElementById('noteTimeEditWrap');
+  const icon=document.getElementById('noteTimeToggleIcon');
+  const open=wrap.style.display==='none';
+  wrap.style.display=open?'block':'none';
+  icon.textContent=open?'▾':'▸';
 }
 
 function closeNoteModal(){document.getElementById('noteOverlay').classList.remove('open');noteStudent=null;notePhotoData=null;}
@@ -1996,11 +2025,18 @@ function confirmResetAttendance(){
 function openTrackEditModal(attKey, status, displayName, dateKey){
   try{
     const s=students.find(x=>x.name===displayName)||{};
-    noteStudent={name:attKey, displayName:displayName, status:status, dateKey:dateKey, fromTrack:true};
-    document.getElementById('noteTitle').textContent='✏️ Edit Catatan';
-    document.getElementById('noteSub').textContent=displayName+(s.time?' · '+s.time+(s.time2?'–'+s.time2:''):'');
-    document.getElementById('noteStatus').value=status;
     const noteKey=dateKey+'_'+attKey;
+    const existingMeta=attMeta[noteKey]||{};
+    const snapTime=existingMeta.time||s.time||'';
+    const snapTime2=existingMeta.time2||s.time2||'';
+    noteStudent={name:attKey, displayName:displayName, status:status, dateKey:dateKey, fromTrack:true, time:snapTime, time2:snapTime2};
+    document.getElementById('noteTitle').textContent='✏️ Edit Catatan';
+    document.getElementById('noteSub').textContent=displayName+(snapTime?' · '+snapTime+(snapTime2?'–'+snapTime2:''):'');
+    document.getElementById('noteTimeInput').value=snapTime;
+    document.getElementById('noteTime2Input').value=snapTime2;
+    document.getElementById('noteTimeEditWrap').style.display='none';
+    document.getElementById('noteTimeToggleIcon').textContent='▸';
+    document.getElementById('noteStatus').value=status;
     const existing=attNotes[noteKey]||{};
     document.getElementById('noteReason').value=existing.reason||'';
     document.getElementById('noteProgress').value=existing.progress||'';
@@ -2032,6 +2068,12 @@ function saveNote(){
     // Simpan timestamp saat diabsen untuk sort "Terbaru"
     localStorage.setItem('llk_ts_'+dateKey+'_'+studentName, Date.now().toString());
     const noteKey=dateKey+'_'+studentName;
+    // Simpan snapshot jam jadwal SAAT ini ditandai — supaya kalau jadwal siswa
+    // diedit belakangan, riwayat lama tetap menampilkan jam yang benar (bukan jam baru).
+    // Ambil dari input field (bisa dikoreksi manual oleh user) dengan fallback ke snapshot otomatis.
+    const editedTime=(document.getElementById('noteTimeInput').value)||noteStudent.time||'';
+    const editedTime2=(document.getElementById('noteTime2Input').value)||noteStudent.time2||'';
+    if(editedTime) attMeta[noteKey]={time:editedTime,time2:editedTime2};
     if(reason||progress||notePhotoData) attNotes[noteKey]={reason:reason,progress:progress,photo:notePhotoData||null};
     else delete attNotes[noteKey];
     save();closeNoteModal();
@@ -2724,8 +2766,10 @@ function buildDateDetail(dk){
     const regStatus=dayAtt[s.name];
     if(regStatus&&regStatus!=='belum'&&!coveredKeys.has(s.name)){
       coveredKeys.add(s.name);
+      const meta=attMeta[dk+'_'+s.name]||{};
       scheduled.push(Object.assign({},s,{
-        time:s.time||'00:00',_originalIdx:students.indexOf(s),
+        time:meta.time||s.time||'00:00', time2:meta.time2||s.time2||'',
+        _originalIdx:students.indexOf(s),
         _isRescheduled:false,_isExtra:false,_isOrphaned:true
       }));
     }
@@ -2735,8 +2779,10 @@ function buildDateDetail(dk){
       const est=dayAtt[k];
       if(!est||est==='belum') return;
       coveredKeys.add(k);
+      const meta=attMeta[dk+'_'+k]||{};
       scheduled.push(Object.assign({},s,{
-        time:s.time||'00:00',_originalIdx:students.indexOf(s),
+        time:meta.time||s.time||'00:00', time2:meta.time2||s.time2||'',
+        _originalIdx:students.indexOf(s),
         _attKey:k,_extraDate:dk,_isExtra:true,_isOrphaned:true
       }));
     });
@@ -2760,6 +2806,13 @@ function buildDateDetail(dk){
     const attDateKey=s._extraDate||dk;
     const sidx=s._originalIdx!==undefined?s._originalIdx:students.indexOf(s);
     const status=(attendance[attDateKey]||{})[attKey]||'belum';
+    // Kalau sesi ini sudah pernah ditandai (hadir/izin/alpa) dan ada snapshot jam
+    // dari saat itu, pakai jam snapshot-nya — bukan jam terbaru siswa (jaga-jaga
+    // kalau jadwalnya diedit belakangan, riwayat lama tidak ikut berubah)
+    if(status!=='belum'){
+      const meta=attMeta[attDateKey+'_'+attKey];
+      if(meta&&meta.time){ s=Object.assign({},s,{time:meta.time,time2:meta.time2||''}); }
+    }
     const note=attNotes[attDateKey+'_'+attKey]||{};
     const icon=getInstrumentIcon(s.instrument);
     const isVokal=(s.instrument||'').toLowerCase().includes('vok');
@@ -2805,9 +2858,9 @@ function buildDateDetail(dk){
 
     const attBtns=`
         <div class="att-btns" onclick="event.stopPropagation()" style="margin-top:8px">
-          <button class="att-btn a-hadir ${status==='hadir'?'on':''}" onclick="openNoteModal('${safeKey}','hadir','${safeName}','${safeDk}');setTimeout(renderTrack,300)">✅</button>
-          <button class="att-btn a-izin ${status==='izin'?'on':''}" onclick="openNoteModal('${safeKey}','izin','${safeName}','${safeDk}');setTimeout(renderTrack,300)">✋</button>
-          <button class="att-btn a-alpa ${status==='alpa'?'on':''}" onclick="openNoteModal('${safeKey}','alpa','${safeName}','${safeDk}');setTimeout(renderTrack,300)">✗</button>
+          <button class="att-btn a-hadir ${status==='hadir'?'on':''}" onclick="openNoteModal('${safeKey}','hadir','${safeName}','${safeDk}','${s.time||''}','${s.time2||''}');setTimeout(renderTrack,300)">✅</button>
+          <button class="att-btn a-izin ${status==='izin'?'on':''}" onclick="openNoteModal('${safeKey}','izin','${safeName}','${safeDk}','${s.time||''}','${s.time2||''}');setTimeout(renderTrack,300)">✋</button>
+          <button class="att-btn a-alpa ${status==='alpa'?'on':''}" onclick="openNoteModal('${safeKey}','alpa','${safeName}','${safeDk}','${s.time||''}','${s.time2||''}');setTimeout(renderTrack,300)">✗</button>
           <button class="att-btn" onclick="openTrackEditModal('${safeKey}','${status||'hadir'}','${safeName}','${safeDk}')">✏️</button>
           ${s.sheetLink&&status!=='izin'?`<button class="att-btn sheet-btn-${sidx}" onclick="openSheetLinkByName('${safeName}','${safeDk}')" style="${localStorage.getItem('sheet_sent_'+safeDk+'_'+s.name.replace(/[^a-zA-Z0-9]/g,'_'))?'background:#eafaf1;border-color:rgba(29,158,78,0.4)':'background:var(--blue-bg);border-color:rgba(0,113,227,0.3)'}">${localStorage.getItem('sheet_sent_'+safeDk+'_'+s.name.replace(/[^a-zA-Z0-9]/g,'_'))?'✅':'📨'}</button>`:''}
         </div>`;
@@ -3884,7 +3937,7 @@ function restoreSettingsData(obj){
 
 function exportData(){
   const data={
-    students,attendance,attNotes,quickLinks,
+    students,attendance,attNotes,attMeta,quickLinks,
     misc:collectPrefixedData(),
     settings:collectSettingsData(),
     exportedAt:new Date().toISOString(),version:'6'
@@ -4082,6 +4135,7 @@ function readImportFile(input){
       students=data.students||[];
       attendance=data.attendance||{};
       attNotes=data.attNotes||data.attendanceNotes||{};
+      attMeta=data.attMeta||{};
       quickLinks=data.quickLinks||[];
       restorePrefixedData(data.misc||data.sheetSent||{}); // dukung format backup lama juga
       restoreSettingsData(data.settings);
@@ -4121,6 +4175,7 @@ function doImportFromText(){
     students=data.students||[];
     attendance=data.attendance||{};
     attNotes=data.attNotes||data.attendanceNotes||{};
+    attMeta=data.attMeta||{};
     quickLinks=data.quickLinks||[];
     restorePrefixedData(data.misc||data.sheetSent||{}); // dukung format backup lama juga
     restoreSettingsData(data.settings);
