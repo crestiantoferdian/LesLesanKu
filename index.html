@@ -2347,13 +2347,40 @@ function toggleShowInactiveSiswa(){
 }
 
 // ── PR / TUGAS GURU ────────────────────────────────────
+let editingTaskId=null;
 function addTeacherTask(){
   const input=document.getElementById('taskInput');
   const text=input.value.trim();
   if(!text){ toast('❌ Tulis dulu tugasnya'); return; }
+  if(editingTaskId){
+    const t=teacherTasks.find(x=>x.id===editingTaskId);
+    if(t) t.text=text;
+    editingTaskId=null;
+    input.value='';
+    save();
+    renderLinks();
+    toast('✅ Tugas diperbarui');
+    return;
+  }
   teacherTasks.unshift({id:'task_'+Date.now()+'_'+Math.random().toString(36).slice(2,6),text:text,done:false,createdAt:Date.now()});
   input.value='';
   save();
+  renderLinks();
+}
+function editTeacherTask(id){
+  const t=teacherTasks.find(x=>x.id===id);
+  if(!t) return;
+  editingTaskId=id;
+  renderLinks();
+  setTimeout(()=>{
+    const input=document.getElementById('taskInput');
+    if(input){ input.value=t.text; input.focus(); input.setSelectionRange(input.value.length,input.value.length); }
+  },50);
+}
+function cancelEditTeacherTask(){
+  editingTaskId=null;
+  const input=document.getElementById('taskInput');
+  if(input) input.value='';
   renderLinks();
 }
 function toggleTeacherTask(id){
@@ -2439,18 +2466,20 @@ function teacherTasksHtml(){
   const pending=teacherTasks.filter(t=>!t.done);
   const done=teacherTasks.filter(t=>t.done);
   const rowHtml=t=>`
-    <div style="display:flex;align-items:center;gap:10px;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:11px 12px;margin-bottom:8px">
+    <div style="display:flex;align-items:center;gap:10px;background:var(--card);border:1px solid ${editingTaskId===t.id?'var(--blue)':'var(--border)'};border-radius:12px;padding:11px 12px;margin-bottom:8px">
       <button onclick="toggleTeacherTask('${t.id}')" style="flex-shrink:0;width:22px;height:22px;border-radius:7px;border:2px solid ${t.done?'var(--hadir)':'var(--border)'};background:${t.done?'var(--hadir)':'transparent'};color:#fff;font-size:0.72rem;cursor:pointer;display:flex;align-items:center;justify-content:center">${t.done?'✓':''}</button>
       <span style="flex:1;min-width:0;font-size:0.85rem;${t.done?'color:var(--muted);text-decoration:line-through':'color:var(--text)'};word-break:break-word">${escapeHtml(t.text)}</span>
+      <button onclick="editTeacherTask('${t.id}')" style="flex-shrink:0;width:26px;height:26px;border-radius:8px;border:none;background:none;color:var(--muted);font-size:0.85rem;cursor:pointer">✏️</button>
       <button onclick="deleteTeacherTask('${t.id}')" style="flex-shrink:0;width:26px;height:26px;border-radius:8px;border:none;background:none;color:var(--muted);font-size:0.9rem;cursor:pointer">🗑</button>
     </div>`;
   return `
     <div style="background:var(--card2);border:1px solid var(--border);border-radius:16px;padding:16px;margin-bottom:20px">
       <div style="font-size:0.72rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:10px">📝 PR / Tugas Guru${pending.length?' ('+pending.length+')':''}</div>
+      ${editingTaskId?'<div style="font-size:0.72rem;color:var(--blue);font-weight:700;margin-bottom:6px">✏️ Mengedit tugas — <span onclick="cancelEditTeacherTask()" style="text-decoration:underline;cursor:pointer">batal</span></div>':''}
       <div style="display:flex;gap:8px;margin-bottom:${teacherTasks.length?'14':'0'}px">
         <input id="taskInput" type="text" placeholder="cth: Buat materi lagu untuk Rere" onkeydown="if(event.key==='Enter')addTeacherTask()"
-          style="flex:1;min-width:0;background:var(--card);border:1.5px solid var(--border);color:var(--text);font-family:'DM Sans',sans-serif;font-size:0.85rem;padding:10px 12px;border-radius:10px;outline:none"/>
-        <button onclick="addTeacherTask()" style="flex-shrink:0;padding:0 16px;background:var(--red);color:#fff;border:none;border-radius:10px;font-family:sans-serif;font-weight:700;font-size:0.85rem;cursor:pointer">+</button>
+          style="flex:1;min-width:0;background:var(--card);border:1.5px solid ${editingTaskId?'var(--blue)':'var(--border)'};color:var(--text);font-family:'DM Sans',sans-serif;font-size:0.85rem;padding:10px 12px;border-radius:10px;outline:none"/>
+        <button onclick="addTeacherTask()" style="flex-shrink:0;padding:0 16px;background:${editingTaskId?'var(--blue)':'var(--red)'};color:#fff;border:none;border-radius:10px;font-family:sans-serif;font-weight:700;font-size:0.85rem;cursor:pointer">${editingTaskId?'✓':'+'}</button>
       </div>
       ${pending.length?pending.map(rowHtml).join(''):(teacherTasks.length===0?'<div style="font-size:0.78rem;color:var(--muted);text-align:center;padding:6px 0 2px">Belum ada PR — tambahkan biar nggak lupa 😊</div>':'')}
       ${done.length?`<div onclick="window._showDoneTasks=!window._showDoneTasks;renderLinks()" style="font-size:0.74rem;color:var(--muted);font-weight:600;cursor:pointer;margin-top:${pending.length?'4':'0'}px;padding-top:8px;border-top:1px solid var(--border)">${window._showDoneTasks?'▲ Sembunyikan':'▼ Tampilkan'} ${done.length} selesai</div>`:''}
