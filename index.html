@@ -487,7 +487,7 @@ body{
   <button class="bnav" onclick="setTab('siswa')" id="tab-siswa"><span class="bicon">🎓</span>Siswa<div class="bnav-dot"></div></button>
   <button class="bnav" onclick="setTab('track')" id="tab-track"><span class="bicon">📈</span>Track<div class="bnav-dot"></div></button>
   <button class="bnav" onclick="setTab('kirim')" id="tab-kirim"><span class="bicon">📊</span>Kirim<div class="bnav-dot"></div></button>
-  <button class="bnav" onclick="setTab('links')" id="tab-links"><span class="bicon">🔗</span>Link<div class="bnav-dot"></div></button>
+  <button class="bnav" onclick="setTab('links')" id="tab-links"><span class="bicon">🔗</span>Materi<div class="bnav-dot"></div></button>
   <button class="bnav" onclick="setTab('lainnya')" id="tab-lainnya"><span class="bicon">•••</span>Lainnya<div class="bnav-dot"></div></button>
 </div>
 
@@ -816,7 +816,8 @@ let trackMode='siswa';   // 'siswa' | 'tanggal'
 let calYear=new Date().getFullYear();
 let calMonth=new Date().getMonth();
 let selectedCalDate=null;
-let quickLinks=[]; // {id,name,url} — tombol tautan kustom di tab Link
+let quickLinks=[]; // {id,name,url} — tombol tautan kustom di tab Materi
+let teacherTasks=[]; // {id,text,done,createdAt} — PR/tugas guru (mis. "buat materi lagu X untuk Rere")
 let paymentMode=localStorage.getItem('llk_payment_mode')||'session'; // 'session' | 'monthly' | 'off'
 
 // ── SHARE JADWAL ──────────────────────────────────────
@@ -866,6 +867,7 @@ function save(){
   localStorage.setItem('rms4_n',JSON.stringify(attNotes));
   localStorage.setItem('rms4_meta',JSON.stringify(attMeta));
   localStorage.setItem('rms4_links',JSON.stringify(quickLinks));
+  localStorage.setItem('rms4_tasks',JSON.stringify(teacherTasks));
 }
 function loadStorage(){
   try{students=JSON.parse(localStorage.getItem('rms4_s')||'[]');}catch(e){students=[];}
@@ -873,6 +875,7 @@ function loadStorage(){
   try{attNotes=JSON.parse(localStorage.getItem('rms4_n')||'{}');}catch(e){attNotes={};}
   try{attMeta=JSON.parse(localStorage.getItem('rms4_meta')||'{}');}catch(e){attMeta={};}
   try{quickLinks=JSON.parse(localStorage.getItem('rms4_links')||'[]');}catch(e){quickLinks=[];}
+  try{teacherTasks=JSON.parse(localStorage.getItem('rms4_tasks')||'[]');}catch(e){teacherTasks=[];}
   // Migrasi data lama: rescueDay/rescueUntil → reschedules array
   let migrated=false;
   students.forEach(function(s){
@@ -1228,6 +1231,10 @@ window.addEventListener('popstate',function(e){
   const rov=document.getElementById('rescheduleOverlay');
   const lov=document.getElementById('linkOverlay');
   const pov=document.getElementById('photoLightboxOverlay');
+  const gcov=document.getElementById('genericConfirmOverlay');
+  if(gcov&&gcov.classList.contains('open')){
+    gcov.classList.remove('open'); window._genericConfirmCallback=null; return;
+  }
   if(pov&&pov.classList.contains('open')){
     pov.classList.remove('open'); return;
   }
@@ -1332,6 +1339,7 @@ function render(){
   else if(currentTab==='kirim') renderKirim();
   else if(currentTab==='links') renderLinks();
   else renderLainnya();
+  updateMateriBadge();
 }
 
 // ── DAY BAR ───────────────────────────────────────────
@@ -2336,6 +2344,118 @@ function buildSiswaListHtml(needPay,ok,filtered,inactiveList){
 function toggleShowInactiveSiswa(){
   window.showInactiveSiswa=!window.showInactiveSiswa;
   renderSiswaList();
+}
+
+// ── PR / TUGAS GURU ────────────────────────────────────
+function addTeacherTask(){
+  const input=document.getElementById('taskInput');
+  const text=input.value.trim();
+  if(!text){ toast('❌ Tulis dulu tugasnya'); return; }
+  teacherTasks.unshift({id:'task_'+Date.now()+'_'+Math.random().toString(36).slice(2,6),text:text,done:false,createdAt:Date.now()});
+  input.value='';
+  save();
+  renderLinks();
+}
+function toggleTeacherTask(id){
+  const t=teacherTasks.find(x=>x.id===id);
+  if(!t) return;
+  if(!t.done){
+    // Tandai selesai perlu konfirmasi dulu — batal centang (undo) tidak perlu
+    showGenericConfirm('Selesaikan Tugas?', 'Yakin sudah menyelesaikan:<br><b>'+escapeHtml(t.text)+'</b>?', '✅ Ya, Selesai', function(){
+      t.done=true;
+      save();
+      renderLinks();
+    });
+    return;
+  }
+  t.done=false;
+  save();
+  renderLinks();
+}
+function deleteTeacherTask(id){
+  teacherTasks=teacherTasks.filter(x=>x.id!==id);
+  save();
+  renderLinks();
+}
+
+// ── DIALOG KONFIRMASI GENERIK ──────────────────────────
+// Bisa dipakai fitur mana pun yang butuh "yakin?" sebelum aksi, tanpa harus bikin overlay baru tiap kali.
+function showGenericConfirm(title, msg, confirmLabel, onConfirm){
+  let overlay=document.getElementById('genericConfirmOverlay');
+  if(!overlay){
+    overlay=document.createElement('div');
+    overlay.id='genericConfirmOverlay';
+    overlay.className='overlay';
+    overlay.innerHTML=`
+      <div class="modal" style="max-width:340px">
+        <div id="genericConfirmTitle" style="font-size:1rem;font-weight:800;margin-bottom:10px;text-align:center"></div>
+        <div id="genericConfirmMsg" style="font-size:0.88rem;color:var(--text);text-align:center;margin-bottom:18px;line-height:1.6"></div>
+        <div style="display:flex;gap:10px">
+          <button onclick="cancelGenericConfirm()" style="flex:1;padding:13px;border-radius:12px;border:1.5px solid var(--border);background:transparent;color:var(--muted);font-family:sans-serif;font-size:0.9rem;font-weight:700;cursor:pointer">Batal</button>
+          <button id="genericConfirmYesBtn" onclick="confirmGenericConfirm()" style="flex:1;padding:13px;border-radius:12px;border:none;background:var(--hadir);color:#fff;font-family:sans-serif;font-size:0.9rem;font-weight:700;cursor:pointer"></button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+  }
+  document.getElementById('genericConfirmTitle').textContent=title;
+  document.getElementById('genericConfirmMsg').innerHTML=msg;
+  document.getElementById('genericConfirmYesBtn').textContent=confirmLabel||'Ya';
+  window._genericConfirmCallback=onConfirm;
+  history.pushState({tab:currentTab, view:'modal'},'');
+  overlay.classList.add('open');
+}
+function cancelGenericConfirm(){
+  const overlay=document.getElementById('genericConfirmOverlay');
+  if(overlay) overlay.classList.remove('open');
+  window._genericConfirmCallback=null;
+  history.back();
+}
+function confirmGenericConfirm(){
+  const overlay=document.getElementById('genericConfirmOverlay');
+  if(overlay) overlay.classList.remove('open');
+  const cb=window._genericConfirmCallback;
+  window._genericConfirmCallback=null;
+  if(cb) cb();
+}
+function updateMateriBadge(){
+  const pending=teacherTasks.filter(t=>!t.done).length;
+  const btn=document.getElementById('tab-links');
+  if(!btn) return;
+  let badge=document.getElementById('materiTaskBadge');
+  if(pending>0){
+    if(!badge){
+      badge=document.createElement('span');
+      badge.id='materiTaskBadge';
+      badge.style.cssText='position:absolute;top:2px;right:calc(50% - 22px);min-width:16px;height:16px;padding:0 4px;border-radius:9px;background:var(--red);color:#fff;font-size:0.6rem;font-weight:800;display:flex;align-items:center;justify-content:center;line-height:1';
+      btn.style.position='relative';
+      btn.appendChild(badge);
+    }
+    badge.textContent=pending>99?'99+':pending;
+  } else if(badge){
+    badge.remove();
+  }
+}
+function teacherTasksHtml(){
+  const pending=teacherTasks.filter(t=>!t.done);
+  const done=teacherTasks.filter(t=>t.done);
+  const rowHtml=t=>`
+    <div style="display:flex;align-items:center;gap:10px;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:11px 12px;margin-bottom:8px">
+      <button onclick="toggleTeacherTask('${t.id}')" style="flex-shrink:0;width:22px;height:22px;border-radius:7px;border:2px solid ${t.done?'var(--hadir)':'var(--border)'};background:${t.done?'var(--hadir)':'transparent'};color:#fff;font-size:0.72rem;cursor:pointer;display:flex;align-items:center;justify-content:center">${t.done?'✓':''}</button>
+      <span style="flex:1;min-width:0;font-size:0.85rem;${t.done?'color:var(--muted);text-decoration:line-through':'color:var(--text)'};word-break:break-word">${escapeHtml(t.text)}</span>
+      <button onclick="deleteTeacherTask('${t.id}')" style="flex-shrink:0;width:26px;height:26px;border-radius:8px;border:none;background:none;color:var(--muted);font-size:0.9rem;cursor:pointer">🗑</button>
+    </div>`;
+  return `
+    <div style="background:var(--card2);border:1px solid var(--border);border-radius:16px;padding:16px;margin-bottom:20px">
+      <div style="font-size:0.72rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:10px">📝 PR / Tugas Guru${pending.length?' ('+pending.length+')':''}</div>
+      <div style="display:flex;gap:8px;margin-bottom:${teacherTasks.length?'14':'0'}px">
+        <input id="taskInput" type="text" placeholder="cth: Buat materi lagu untuk Rere" onkeydown="if(event.key==='Enter')addTeacherTask()"
+          style="flex:1;min-width:0;background:var(--card);border:1.5px solid var(--border);color:var(--text);font-family:'DM Sans',sans-serif;font-size:0.85rem;padding:10px 12px;border-radius:10px;outline:none"/>
+        <button onclick="addTeacherTask()" style="flex-shrink:0;padding:0 16px;background:var(--red);color:#fff;border:none;border-radius:10px;font-family:sans-serif;font-weight:700;font-size:0.85rem;cursor:pointer">+</button>
+      </div>
+      ${pending.length?pending.map(rowHtml).join(''):(teacherTasks.length===0?'<div style="font-size:0.78rem;color:var(--muted);text-align:center;padding:6px 0 2px">Belum ada PR — tambahkan biar nggak lupa 😊</div>':'')}
+      ${done.length?`<div onclick="window._showDoneTasks=!window._showDoneTasks;renderLinks()" style="font-size:0.74rem;color:var(--muted);font-weight:600;cursor:pointer;margin-top:${pending.length?'4':'0'}px;padding-top:8px;border-top:1px solid var(--border)">${window._showDoneTasks?'▲ Sembunyikan':'▼ Tampilkan'} ${done.length} selesai</div>`:''}
+      ${window._showDoneTasks?done.map(rowHtml).join(''):''}
+    </div>`;
 }
 
 // Render hanya list tanpa rebuild seluruh halaman (agar keyboard tidak tutup)
@@ -3550,10 +3670,11 @@ function renderLinks(){
 
   document.getElementById('mainContent').innerHTML=
     `<div class="page-title-area">
-      <div class="page-title" style="margin:0">Link</div>
-      <div class="page-sub">Tombol pintasan ke link apa pun — tap untuk langsung dibuka.</div>
+      <div class="page-title" style="margin:0">Materi</div>
+      <div class="page-sub">Tombol pintasan ke materi/link apa pun — tap untuk langsung dibuka.</div>
     </div>
     <div style="padding:0 20px 24px">
+      ${teacherTasksHtml()}
       <div style="display:flex;gap:10px;margin-bottom:16px">
         <button onclick="openAddFolderModal()" style="flex:1;padding:14px;background:var(--card);color:var(--text);border:1.5px solid var(--border);border-radius:14px;font-family:sans-serif;font-weight:700;font-size:0.85rem;cursor:pointer">📁 Folder Baru</button>
         <button onclick="openAddLinkModal(null)" style="flex:1;padding:14px;background:var(--red);color:#fff;border:none;border-radius:14px;font-family:sans-serif;font-weight:700;font-size:0.85rem;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,0.12)">+ Tambah Tautan</button>
@@ -3937,7 +4058,7 @@ function restoreSettingsData(obj){
 
 function exportData(){
   const data={
-    students,attendance,attNotes,attMeta,quickLinks,
+    students,attendance,attNotes,attMeta,quickLinks,teacherTasks,
     misc:collectPrefixedData(),
     settings:collectSettingsData(),
     exportedAt:new Date().toISOString(),version:'6'
@@ -4137,6 +4258,7 @@ function readImportFile(input){
       attNotes=data.attNotes||data.attendanceNotes||{};
       attMeta=data.attMeta||{};
       quickLinks=data.quickLinks||[];
+      teacherTasks=data.teacherTasks||[];
       restorePrefixedData(data.misc||data.sheetSent||{}); // dukung format backup lama juga
       restoreSettingsData(data.settings);
       save();applySettings();render();
@@ -4177,6 +4299,7 @@ function doImportFromText(){
     attNotes=data.attNotes||data.attendanceNotes||{};
     attMeta=data.attMeta||{};
     quickLinks=data.quickLinks||[];
+    teacherTasks=data.teacherTasks||[];
     restorePrefixedData(data.misc||data.sheetSent||{}); // dukung format backup lama juga
     restoreSettingsData(data.settings);
     save();applySettings();renderLainnya();render();
