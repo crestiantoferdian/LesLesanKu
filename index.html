@@ -817,6 +817,11 @@ let calYear=new Date().getFullYear();
 let calMonth=new Date().getMonth();
 let selectedCalDate=null;
 let quickLinks=[]; // {id,name,url} — tombol tautan kustom di tab Materi
+let kirimSelectedDate=null; // dateKey (YYYY-MM-DD) yang lagi dilihat di tab Kirim, null = pakai hari ini
+function dayNameFromDate(dateKey){
+  const d=new Date(dateKey+'T00:00:00');
+  return DAYS[DAYS_JS.indexOf(d.getDay())]||'Senin';
+}
 let teacherTasks=[]; // {id,text,done,createdAt} — PR/tugas guru (mis. "buat materi lagu X untuk Rere")
 let paymentMode=localStorage.getItem('llk_payment_mode')||'session'; // 'session' | 'monthly' | 'off'
 
@@ -3523,13 +3528,43 @@ function renderHistoryDetail(){
 
 // ── KIRIM ─────────────────────────────────────────────
 function renderKirim(){
-  const dateKey=todayStr();
-  const todayName=todayDayName();
+  const dateKey=kirimSelectedDate||todayStr();
+  const todayName=dayNameFromDate(dateKey);
   const att=attendance[dateKey]||{};
-  const dayS=getStudentsForDay(todayName,dateKey).sort((a,b)=>a.time.localeCompare(b.time));
+  let dayS=getStudentsForDay(todayName,dateKey,!isToday);
+  // Sembunyikan siswa nonaktif untuk tanggal SETELAH dia dinonaktifkan (konsisten dengan tab Track)
+  dayS=dayS.filter(s=>{
+    if(!s.inactive) return true;
+    if(!s.inactiveSince) return true;
+    return dateKey<s.inactiveSince;
+  });
+  // Riwayat yatim: kalau ada absensi nyata di tanggal ini yang tidak lagi tercakup jadwal saat ini
+  // (siswa sudah nonaktif/jadwalnya diubah), tetap munculkan biar laporan lama tidak hilang datanya
+  if(!isToday){
+    const attForDk=attendance[dateKey]||{};
+    const covered=new Set(dayS.map(x=>x._attKey||x.name));
+    students.forEach(s=>{
+      const st=attForDk[s.name];
+      if(st&&st!=='belum'&&!covered.has(s.name)){
+        covered.add(s.name);
+        const meta=attMeta[dateKey+'_'+s.name]||{};
+        dayS.push(Object.assign({},s,{time:meta.time||s.time||'00:00',time2:meta.time2||s.time2||''}));
+      }
+      Object.keys(attForDk).forEach(k=>{
+        if(!k.startsWith(s.name+'_extra_')||covered.has(k)) return;
+        const est=attForDk[k];
+        if(!est||est==='belum') return;
+        covered.add(k);
+        const meta=attMeta[dateKey+'_'+k]||{};
+        dayS.push(Object.assign({},s,{time:meta.time||s.time||'00:00',time2:meta.time2||s.time2||'',_attKey:k,_extraDate:dateKey}));
+      });
+    });
+  }
+  dayS.sort((a,b)=>a.time.localeCompare(b.time));
 
-  const tgl=new Date().toLocaleDateString('id-ID',{day:'numeric',month:'numeric',year:'numeric'}).replace(/\//g,'/');
+  const tgl=new Date(dateKey+'T00:00:00').toLocaleDateString('id-ID',{day:'numeric',month:'numeric',year:'numeric'}).replace(/\//g,'/');
   const hariName=todayName;
+  const isToday=dateKey===todayStr();
 
   // Filter hanya Hadir dan Alpa (termasuk reschedule & extra)
   // Skip kartu jam asli yang sudah dipindah (_sameday_reschedule) agar tidak duplikat
@@ -3569,9 +3604,19 @@ function renderKirim(){
   document.getElementById('mainContent').innerHTML=`
     <div class="page-title-area">
       <div class="page-title">Kirim Laporan</div>
-      <div class="page-sub">Data Hadir & Alpa hari ini — siap paste ke Google Sheets.</div>
+      <div class="page-sub">Data Hadir & Alpa ${isToday?'hari ini':'tanggal ini'} — siap paste ke Google Sheets.</div>
     </div>
     <div style="padding:0 16px 80px">
+
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">
+        <button onclick="shiftKirimDate(-1)" style="flex-shrink:0;width:38px;height:38px;border-radius:11px;border:1.5px solid var(--border);background:var(--card);color:var(--text);font-size:1rem;cursor:pointer">‹</button>
+        <div style="flex:1;position:relative">
+          <input type="date" id="kirimDateInput" value="${dateKey}" onchange="setKirimDate(this.value)"
+            style="width:100%;background:var(--card);border:1.5px solid var(--border);color:var(--text);font-family:'DM Sans',sans-serif;font-size:0.85rem;font-weight:700;padding:9px 10px;border-radius:11px;outline:none;text-align:center"/>
+        </div>
+        <button onclick="shiftKirimDate(1)" style="flex-shrink:0;width:38px;height:38px;border-radius:11px;border:1.5px solid var(--border);background:var(--card);color:var(--text);font-size:1rem;cursor:pointer">›</button>
+        ${!isToday?`<button onclick="setKirimDate(null)" style="flex-shrink:0;padding:0 14px;height:38px;border-radius:11px;border:none;background:var(--red);color:#fff;font-family:sans-serif;font-size:0.78rem;font-weight:700;cursor:pointer">Hari Ini</button>`:''}
+      </div>
 
       <div style="background:var(--card);border:1px solid var(--border);border-radius:20px;overflow:hidden;box-shadow:var(--shadow-sm);margin-bottom:14px">
         <div style="padding:14px 16px 10px;border-bottom:1px solid var(--border2);display:flex;align-items:center;justify-content:space-between">
@@ -3609,6 +3654,18 @@ function renderKirim(){
   window._kirimDateKey = dateKey;
 }
 
+function setKirimDate(dateKey){
+  kirimSelectedDate=dateKey||null;
+  renderKirim();
+}
+function shiftKirimDate(delta){
+  const cur=kirimSelectedDate||todayStr();
+  const d=new Date(cur+'T00:00:00');
+  d.setDate(d.getDate()+delta);
+  const next=d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
+  kirimSelectedDate=next===todayStr()?null:next;
+  renderKirim();
+}
 function kirimCopy(){
   const txt = window._kirimText||'';
   if(!txt){toast('Tidak ada data untuk disalin');return;}
