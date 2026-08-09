@@ -3529,6 +3529,7 @@ function renderHistoryDetail(){
 // ── KIRIM ─────────────────────────────────────────────
 function renderKirim(){
   const dateKey=kirimSelectedDate||todayStr();
+  const isToday=dateKey===todayStr();
   const todayName=dayNameFromDate(dateKey);
   const att=attendance[dateKey]||{};
   let dayS=getStudentsForDay(todayName,dateKey,!isToday);
@@ -3564,7 +3565,6 @@ function renderKirim(){
 
   const tgl=new Date(dateKey+'T00:00:00').toLocaleDateString('id-ID',{day:'numeric',month:'numeric',year:'numeric'}).replace(/\//g,'/');
   const hariName=todayName;
-  const isToday=dateKey===todayStr();
 
   // Filter hanya Hadir dan Alpa (termasuk reschedule & extra)
   // Skip kartu jam asli yang sudah dipindah (_sameday_reschedule) agar tidak duplikat
