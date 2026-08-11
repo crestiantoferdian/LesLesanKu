@@ -5310,6 +5310,7 @@ function openRescheduleModal(name, day, idx, extraIdx, extraDate){
   }
   _rsName=name; _rsDay=day; _rsIdx=idx;
   _rsExtraIdx=(extraIdx!==undefined&&extraIdx!==null&&extraIdx!==-1&&extraIdx!=='null')?extraIdx:null;
+  document.getElementById('rs_date').setAttribute('min', todayStr()); // cegah pilih tanggal masa lalu dari kalender itu sendiri
   const s=students[idx]||{};
   const clearBtn=document.getElementById('rsClearBtn');
   const curInfo=document.getElementById('rs_current');
@@ -5368,6 +5369,10 @@ function closeRescheduleModal(){
 function saveReschedule(){
   const date=document.getElementById('rs_date').value;
   if(!date){toast('❌ Pilih tanggal reschedule!');return;}
+  if(date<todayStr()){
+    toast('❌ Tanggal '+date.split('-').reverse().join('/')+' sudah lewat — cek lagi bulan/tahunnya di kalender');
+    return;
+  }
   const time=document.getElementById('rs_time').value;
   const time2=document.getElementById('rs_time2').value;
   const s=students[_rsIdx];
