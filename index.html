@@ -681,17 +681,14 @@ body{
       <textarea id="noteProgress" rows="4" placeholder="cth: Sudah sampai halaman 12, latihan tangga nada C mayor, PR: ulangi bar 5-8..."></textarea>
     </div>
     <div class="mfield" id="notePhotoWrap">
-      <label>📷 Foto Progress (opsional)</label>
-      <div id="notePhotoPreviewBox" style="display:none;position:relative;margin-bottom:8px">
-        <img id="notePhotoPreviewImg" src="" style="width:100%;max-height:220px;object-fit:cover;border-radius:12px;border:1px solid var(--border);display:block"/>
-        <button type="button" onclick="removeNotePhoto()" style="position:absolute;top:8px;right:8px;width:30px;height:30px;border-radius:50%;background:rgba(0,0,0,0.6);color:#fff;border:none;font-size:1rem;font-weight:700;cursor:pointer;line-height:1">✕</button>
-      </div>
+      <label>📷 Foto Progress (opsional, maks 6)</label>
+      <div id="notePhotoPreviewGrid" style="display:none;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px"></div>
       <div id="notePhotoBtnRow" style="display:flex;gap:8px">
-        <button type="button" onclick="document.getElementById('notePhotoCameraInput').click()" style="flex:1;padding:11px;background:var(--blue-bg);color:var(--blue);border:1px solid rgba(37,99,235,0.3);border-radius:11px;font-family:sans-serif;font-size:0.82rem;font-weight:700;cursor:pointer">📷 Ambil Foto</button>
-        <button type="button" onclick="document.getElementById('notePhotoGalleryInput').click()" style="flex:1;padding:11px;background:var(--card2);color:var(--text);border:1px solid var(--border);border-radius:11px;font-family:sans-serif;font-size:0.82rem;font-weight:700;cursor:pointer">🖼️ Galeri</button>
+        <button type="button" id="notePhotoCameraBtn" onclick="document.getElementById('notePhotoCameraInput').click()" style="flex:1;padding:11px;background:var(--blue-bg);color:var(--blue);border:1px solid rgba(37,99,235,0.3);border-radius:11px;font-family:sans-serif;font-size:0.82rem;font-weight:700;cursor:pointer">📷 Ambil Foto</button>
+        <button type="button" id="notePhotoGalleryBtn" onclick="document.getElementById('notePhotoGalleryInput').click()" style="flex:1;padding:11px;background:var(--card2);color:var(--text);border:1px solid var(--border);border-radius:11px;font-family:sans-serif;font-size:0.82rem;font-weight:700;cursor:pointer">🖼️ Galeri</button>
       </div>
       <input type="file" id="notePhotoCameraInput" accept="image/*" capture="environment" style="display:none" onchange="loadNotePhoto(this)"/>
-      <input type="file" id="notePhotoGalleryInput" accept="image/*" style="display:none" onchange="loadNotePhoto(this)"/>
+      <input type="file" id="notePhotoGalleryInput" accept="image/*" multiple style="display:none" onchange="loadNotePhoto(this)"/>
     </div>
     <div class="mactions">
       <button class="mbtn mbtn-cancel" onclick="closeNoteModal()">Batal</button>
@@ -701,8 +698,14 @@ body{
 </div>
 
 <!-- PHOTO LIGHTBOX -->
-<div class="overlay" id="photoLightboxOverlay" onclick="closePhotoLightbox()" style="background:rgba(0,0,0,0.9);align-items:center;justify-content:center">
-  <img id="photoLightboxImg" src="" style="max-width:94vw;max-height:88vh;border-radius:12px;object-fit:contain"/>
+<div class="overlay" id="photoLightboxOverlay" onclick="if(event.target===this)closePhotoLightbox()" style="background:rgba(0,0,0,0.9);align-items:center;justify-content:center">
+  <div id="lbCounter" style="position:absolute;top:18px;left:50%;transform:translateX(-50%);color:#fff;font-family:sans-serif;font-size:0.8rem;font-weight:700;background:rgba(255,255,255,0.15);padding:5px 14px;border-radius:20px;display:none"></div>
+  <button onclick="closePhotoLightbox()" style="position:absolute;top:14px;right:14px;width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,0.15);color:#fff;border:none;font-size:1.1rem;cursor:pointer;line-height:1">✕</button>
+  <div id="lbSwipeArea" style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;touch-action:pan-y">
+    <img id="photoLightboxImg" src="" style="max-width:94vw;max-height:88vh;border-radius:12px;object-fit:contain;pointer-events:none"/>
+  </div>
+  <button id="lbPrevBtn" onclick="event.stopPropagation();lbNav(-1)" style="display:none;position:absolute;left:10px;top:50%;transform:translateY(-50%);width:42px;height:42px;border-radius:50%;background:rgba(255,255,255,0.15);color:#fff;border:none;font-size:1.3rem;cursor:pointer">‹</button>
+  <button id="lbNextBtn" onclick="event.stopPropagation();lbNav(1)" style="display:none;position:absolute;right:10px;top:50%;transform:translateY(-50%);width:42px;height:42px;border-radius:50%;background:rgba(255,255,255,0.15);color:#fff;border:none;font-size:1.3rem;cursor:pointer">›</button>
 </div>
 
 <!-- LINK MODAL -->
@@ -805,7 +808,8 @@ let currentTab='absensi';
 let selectedDay='';
 let editIdx=null;
 let noteStudent=null;
-let notePhotoData=null; // base64 foto progress (sudah dikompres) untuk modal catatan yang sedang dibuka
+let notePhotosData=[]; // array base64 foto progress (sudah dikompres) untuk modal catatan yang sedang dibuka
+const NOTE_PHOTO_MAX=6;
 let trackPeriod='bulan';
 let incomeHidden=localStorage.getItem('llk_income_hidden')==='1';
 let incomeProjection=false;
@@ -1481,7 +1485,7 @@ function renderAbsensi(){
           ${isRescued?`<span class="s-pill rescue-pill">🔄 Reschedule</span>`:''}
           ${s._isExtra?`<span class="s-pill" style="background:#eef2ff;color:var(--blue);border-color:rgba(37,99,235,0.3)">➕ ${s._extraNote||'Tambahan Kelas'}</span>`:''}
         </div>
-        ${note.progress?`<div class="s-note-preview">📝 ${note.progress}${note.photo?' 📷':''}</div>`:(note.photo?`<div class="s-note-preview">📷 Ada foto progress</div>`:'')}
+        ${note.progress?`<div class="s-note-preview">📝 ${note.progress}${notePhotosArr(note).length?' 📷'+(notePhotosArr(note).length>1?'×'+notePhotosArr(note).length:''):''}</div>`:(notePhotosArr(note).length?`<div class="s-note-preview">📷 ${notePhotosArr(note).length>1?notePhotosArr(note).length+' foto progress':'Ada foto progress'}</div>`:'')}
         ${showPayWarn?`<div class="pay-warn" onclick="sendPaymentWA('${s.name}')">${payWarnLabel}</div>`:''}
         <div class="att-btns" onclick="event.stopPropagation()">
             ${samedayRs
@@ -1895,7 +1899,7 @@ function openNoteModal(attKey, status, displayName, dateOverride, timeOverride, 
     const existing=attNotes[noteKey]||{};
     document.getElementById('noteReason').value=existing.reason||'';
     document.getElementById('noteProgress').value=existing.progress||'';
-    notePhotoData=existing.photo||null;
+    notePhotosData=existing.photos?existing.photos.slice():(existing.photo?[existing.photo]:[]);
     renderNotePhotoPreview();
     onNoteStatusChange();
     document.getElementById('noteOverlay').classList.add('open');
@@ -1922,7 +1926,7 @@ function toggleNoteTimeEdit(){
   icon.textContent=open?'▾':'▸';
 }
 
-function closeNoteModal(){document.getElementById('noteOverlay').classList.remove('open');noteStudent=null;notePhotoData=null;}
+function closeNoteModal(){document.getElementById('noteOverlay').classList.remove('open');noteStudent=null;notePhotosData=[];}
 
 // ── FOTO PROGRESS (kamera/galeri) ──────────────────────
 // Kompres foto ke max 900px & JPEG q0.72 biar hemat localStorage (bisa banyak foto tanpa bikin penuh)
@@ -1948,40 +1952,94 @@ function compressImageToDataURL(file, maxDim, quality){
   });
 }
 function loadNotePhoto(input){
-  const file=input.files[0];
-  if(!file) return;
-  if(!file.type.startsWith('image/')){ toast('❌ File harus berupa gambar'); input.value=''; return; }
-  toast('⏳ Memproses foto...');
-  compressImageToDataURL(file, 900, 0.72).then(dataUrl=>{
-    notePhotoData=dataUrl;
+  const files=Array.from(input.files||[]);
+  if(!files.length) return;
+  const slotsLeft=NOTE_PHOTO_MAX-notePhotosData.length;
+  if(slotsLeft<=0){ toast('❌ Maksimal '+NOTE_PHOTO_MAX+' foto per catatan'); input.value=''; return; }
+  const toProcess=files.slice(0,slotsLeft);
+  if(files.length>slotsLeft) toast('⚠️ Hanya '+slotsLeft+' foto ditambahkan (maksimal '+NOTE_PHOTO_MAX+')');
+  else toast('⏳ Memproses foto...');
+  Promise.all(toProcess.map(file=>{
+    if(!file.type.startsWith('image/')) return Promise.resolve(null);
+    return compressImageToDataURL(file, 900, 0.72).catch(err=>{ console.error('compressImageToDataURL error:',err); return null; });
+  })).then(results=>{
+    const ok=results.filter(Boolean);
+    notePhotosData=notePhotosData.concat(ok);
     renderNotePhotoPreview();
-    toast('✅ Foto ditambahkan');
-  }).catch(err=>{
-    console.error('compressImageToDataURL error:',err);
-    toast('❌ Gagal memproses foto');
+    if(ok.length) toast('✅ '+ok.length+' foto ditambahkan');
+    else toast('❌ Gagal memproses foto');
   }).finally(()=>{ input.value=''; });
 }
-function removeNotePhoto(){
-  notePhotoData=null;
+function removeNotePhoto(idx){
+  notePhotosData.splice(idx,1);
   document.getElementById('notePhotoCameraInput').value='';
   document.getElementById('notePhotoGalleryInput').value='';
   renderNotePhotoPreview();
 }
 function renderNotePhotoPreview(){
-  const box=document.getElementById('notePhotoPreviewBox');
-  const img=document.getElementById('notePhotoPreviewImg');
-  if(notePhotoData){
-    img.src=notePhotoData;
-    box.style.display='block';
+  const grid=document.getElementById('notePhotoPreviewGrid');
+  if(notePhotosData.length){
+    grid.style.display='grid';
+    grid.innerHTML=notePhotosData.map((src,i)=>`
+      <div style="position:relative;aspect-ratio:1;border-radius:10px;overflow:hidden;border:1px solid var(--border)">
+        <img src="${src}" style="width:100%;height:100%;object-fit:cover;display:block"/>
+        <button type="button" onclick="removeNotePhoto(${i})" style="position:absolute;top:4px;right:4px;width:22px;height:22px;border-radius:50%;background:rgba(0,0,0,0.65);color:#fff;border:none;font-size:0.75rem;font-weight:700;cursor:pointer;line-height:1">✕</button>
+      </div>`).join('');
   }else{
-    img.src='';
-    box.style.display='none';
+    grid.style.display='none';
+    grid.innerHTML='';
   }
+  const full=notePhotosData.length>=NOTE_PHOTO_MAX;
+  const camBtn=document.getElementById('notePhotoCameraBtn');
+  const galBtn=document.getElementById('notePhotoGalleryBtn');
+  if(camBtn){ camBtn.disabled=full; camBtn.style.opacity=full?'0.5':'1'; camBtn.style.cursor=full?'not-allowed':'pointer'; }
+  if(galBtn){ galBtn.disabled=full; galBtn.style.opacity=full?'0.5':'1'; galBtn.style.cursor=full?'not-allowed':'pointer'; }
 }
-function openPhotoLightbox(src){
-  document.getElementById('photoLightboxImg').src=src;
+function notePhotosArr(note){
+  if(!note) return [];
+  if(note.photos&&note.photos.length) return note.photos;
+  if(note.photo) return [note.photo];
+  return [];
+}
+function photoGridHtml(photos){
+  if(!photos||!photos.length) return '';
+  const cols=photos.length===1?1:(photos.length===2?2:3);
+  const photosJson=escapeHtml(JSON.stringify(photos));
+  const items=photos.map((src,i)=>`<img src="${src}" data-idx="${i}" onclick="openPhotoLightboxFromGrid(this)" style="width:100%;aspect-ratio:${photos.length===1?'16/9':'1'};object-fit:cover;border-radius:10px;cursor:pointer;display:block"/>`).join('');
+  return `<div class="photo-grid-wrap" data-photos="${photosJson}" style="display:grid;grid-template-columns:repeat(${cols},1fr);gap:6px;margin-top:8px">${items}</div>`;
+}
+function openPhotoLightboxFromGrid(imgEl){
+  const wrap=imgEl.closest('.photo-grid-wrap');
+  if(!wrap) return;
+  let photos=[];
+  try{ photos=JSON.parse(wrap.dataset.photos); }catch(e){ photos=[imgEl.src]; }
+  const idx=parseInt(imgEl.dataset.idx,10)||0;
+  openPhotoLightbox(photos, idx);
+}
+let lbPhotos=[]; let lbIndex=0;
+function openPhotoLightbox(photosOrSrc, startIndex){
+  // Kompatibel dipanggil dengan array foto + index, atau (lama) satu string src saja
+  lbPhotos=Array.isArray(photosOrSrc)?photosOrSrc:[photosOrSrc];
+  lbIndex=startIndex||0;
+  if(lbIndex<0) lbIndex=0;
+  if(lbIndex>=lbPhotos.length) lbIndex=lbPhotos.length-1;
+  renderLightboxPhoto();
   history.pushState({tab:currentTab, view:'modal'},'');
   document.getElementById('photoLightboxOverlay').classList.add('open');
+}
+function renderLightboxPhoto(){
+  document.getElementById('photoLightboxImg').src=lbPhotos[lbIndex]||'';
+  const multi=lbPhotos.length>1;
+  document.getElementById('lbPrevBtn').style.display=multi?'block':'none';
+  document.getElementById('lbNextBtn').style.display=multi?'block':'none';
+  const counter=document.getElementById('lbCounter');
+  counter.style.display=multi?'block':'none';
+  counter.textContent=(lbIndex+1)+' / '+lbPhotos.length;
+}
+function lbNav(dir){
+  if(lbPhotos.length<2) return;
+  lbIndex=(lbIndex+dir+lbPhotos.length)%lbPhotos.length; // muter dari akhir ke awal & sebaliknya
+  renderLightboxPhoto();
 }
 function closePhotoLightbox(){
   const ov=document.getElementById('photoLightboxOverlay');
@@ -1990,6 +2048,28 @@ function closePhotoLightbox(){
     if(history.state&&history.state.view==='modal') history.back();
   }
 }
+// Swipe kiri/kanan untuk ganti foto di lightbox
+(function setupLightboxSwipe(){
+  let sx=0, sy=0, tracking=false;
+  document.addEventListener('DOMContentLoaded', function(){
+    const area=document.getElementById('lbSwipeArea');
+    if(!area) return;
+    area.addEventListener('touchstart', function(e){
+      if(e.touches.length!==1) return;
+      sx=e.touches[0].clientX; sy=e.touches[0].clientY; tracking=true;
+    }, {passive:true});
+    area.addEventListener('touchend', function(e){
+      if(!tracking) return;
+      tracking=false;
+      const ex=(e.changedTouches&&e.changedTouches[0])?e.changedTouches[0].clientX:sx;
+      const ey=(e.changedTouches&&e.changedTouches[0])?e.changedTouches[0].clientY:sy;
+      const dx=ex-sx, dy=ey-sy;
+      if(Math.abs(dx)>50&&Math.abs(dx)>Math.abs(dy)*1.5){
+        lbNav(dx<0?1:-1); // geser kiri = foto berikutnya, geser kanan = foto sebelumnya
+      }
+    }, {passive:true});
+  });
+})();
 
 // ── KONFIRMASI RESET KEHADIRAN ──────────────────────────
 function showConfirmReset(msg){
@@ -2054,7 +2134,7 @@ function openTrackEditModal(attKey, status, displayName, dateKey){
     const existing=attNotes[noteKey]||{};
     document.getElementById('noteReason').value=existing.reason||'';
     document.getElementById('noteProgress').value=existing.progress||'';
-    notePhotoData=existing.photo||null;
+    notePhotosData=existing.photos?existing.photos.slice():(existing.photo?[existing.photo]:[]);
     renderNotePhotoPreview();
     onNoteStatusChange();
     document.getElementById('noteOverlay').classList.add('open');
@@ -2088,7 +2168,7 @@ function saveNote(){
     const editedTime=(document.getElementById('noteTimeInput').value)||noteStudent.time||'';
     const editedTime2=(document.getElementById('noteTime2Input').value)||noteStudent.time2||'';
     if(editedTime) attMeta[noteKey]={time:editedTime,time2:editedTime2};
-    if(reason||progress||notePhotoData) attNotes[noteKey]={reason:reason,progress:progress,photo:notePhotoData||null};
+    if(reason||progress||notePhotosData.length) attNotes[noteKey]={reason:reason,progress:progress,photos:notePhotosData.slice()};
     else delete attNotes[noteKey];
     save();closeNoteModal();
     if(noteStudent&&noteStudent.fromTrack){
@@ -2629,7 +2709,7 @@ function renderStudentProfile(name, period){
             }
           }
         }
-        if(!st&&!note.progress&&!note.reason&&!note.photo) return '';
+        if(!st&&!note.progress&&!note.reason&&!notePhotosArr(note).length) return '';
         const stLabel = st==='hadir'?'✅ Hadir':st==='izin'?'✋ Izin':st==='alpa'?'✗ Alpa':'';
         const stColor = st==='hadir'?'var(--hadir)':st==='izin'?'var(--izin)':'var(--alpa)';
         const safeName2=name.replace(/'/g,"\\'");
@@ -2649,7 +2729,7 @@ function renderStudentProfile(name, period){
           +'</div>'
           +(note.reason?'<div style="font-size:0.82rem;color:var(--text);background:#fffbeb;border-radius:9px;padding:8px 11px;margin-top:5px;border-left:3px solid var(--izin)">📋 '+note.reason+'</div>':'')
           +(note.progress?'<div style="font-size:0.82rem;color:var(--text);background:var(--blue-bg);border-radius:9px;padding:8px 11px;margin-top:6px;border-left:3px solid var(--blue)">📝 '+note.progress+'</div>':'')
-          +(note.photo?'<img src="'+note.photo+'" onclick="openPhotoLightbox(\''+note.photo.replace(/'/g,"\\'")+'\')" style="width:100%;max-height:180px;object-fit:cover;border-radius:10px;margin-top:8px;cursor:pointer"/>':'')
+          +photoGridHtml(notePhotosArr(note))
           +'</div>';
       }).filter(Boolean).join('')
     : '<div class="empty"><div class="empty-icon">📋</div><div class="empty-t">Tidak ada data</div><div class="empty-d">Tidak ada catatan di periode ini</div></div>';
@@ -3505,8 +3585,8 @@ function renderHistoryDetail(){
       </div>
       ${note.reason?`<div class="hist-note">📋 ${note.reason}</div>`:''}
       ${note.progress?`<div class="hist-note" style="margin-top:6px;border-left:3px solid var(--blue);padding-left:10px">📝 ${note.progress}</div>`:''}
-      ${note.photo?`<img src="${note.photo}" onclick="openPhotoLightbox('${note.photo.replace(/'/g,"\\'")}')" style="width:100%;max-height:180px;object-fit:cover;border-radius:10px;margin-top:8px;cursor:pointer"/>`:''}
-      ${!note.reason&&!note.progress&&!note.photo?`<div class="hist-no-note">Tidak ada catatan</div>`:''}
+      ${photoGridHtml(notePhotosArr(note))}
+      ${!note.reason&&!note.progress&&!notePhotosArr(note).length?`<div class="hist-no-note">Tidak ada catatan</div>`:''}
     </div>`;
   }).join(''):`<div class="empty"><div class="empty-icon">📋</div><div class="empty-t">Belum ada histori</div><div class="empty-d">Mulai absen murid ini untuk melihat histori</div></div>`;
 
