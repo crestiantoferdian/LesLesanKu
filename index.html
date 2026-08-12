@@ -430,12 +430,13 @@ body{
   position:fixed;bottom:94px;left:50%;
   transform:translateX(-50%) translateY(14px);
   z-index:999;
+  max-width:calc(100% - 40px);
   background:rgba(20,20,20,0.92);
   backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
-  color:#fff;border-radius:50px;
-  padding:11px 24px;font-size:0.82rem;font-weight:600;
+  color:#fff;border-radius:18px;
+  padding:12px 20px;font-size:0.82rem;font-weight:600;line-height:1.45;
   opacity:0;transition:all 0.24s cubic-bezier(.34,1.56,.64,1);
-  pointer-events:none;white-space:nowrap;
+  pointer-events:none;white-space:normal;text-align:center;
   box-shadow:0 4px 24px rgba(0,0,0,0.22);letter-spacing:-0.01em;
 }
 #toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
