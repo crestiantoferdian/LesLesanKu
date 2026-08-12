@@ -1277,6 +1277,14 @@ window.addEventListener('popstate',function(e){
     history.pushState({tab:'links',view:'main'},''); return;
   }
 
+  // 2c2. Kembali dari halaman Materi/PR Guru ke landing tab Materi
+  if(materiSection){
+    materiSection=null;
+    currentTab='links';
+    renderLinks();
+    history.pushState({tab:'links',view:'main'},''); return;
+  }
+
   // 2b. Kembali dari profil siswa
   if(window._profileName){
     const backTo = state.profileFrom || state.tab || window._profileFrom || 'siswa';
@@ -1338,6 +1346,7 @@ function setTab(t){
   currentTab=t;
   if(t!=='track') viewingStudent=null;
   if(t!=='links') viewingLinkFolder=null;
+  if(t!=='links') materiSection=null;
   history.pushState({tab:t, view:'main'},'');
   ['absensi','siswa','track','kirim','links','lainnya'].forEach(x=>document.getElementById('tab-'+x).classList.toggle('active',x===t));
   render();
@@ -3775,6 +3784,7 @@ function fallbackKirimCopy(txt,dk){
 
 // ── TAB LINK (folder + tombol tautan kustom) ─────────
 let viewingLinkFolder=null; // id folder yang sedang dibuka, null = daftar utama
+let materiSection=null; // null = landing (2 kotak), 'materi' = daftar folder/tautan, 'pr' = daftar PR Guru
 const LINK_ICON_CHOICES=['📁','🔗','🎹','🎸','🎻','🥁','🎤','🎵','📚','📝','🎬','📷','💰','🌐','⭐','📌'];
 let selectedLinkIcon='📁';
 
@@ -3802,7 +3812,60 @@ function linkIconHtml(item, fallbackEmoji){
 
 function renderLinks(){
   if(viewingLinkFolder){ renderLinkFolderView(viewingLinkFolder); return; }
+  if(materiSection==='pr'){ renderMateriPrPage(); return; }
+  if(materiSection==='materi'){ renderMateriListPage(); return; }
 
+  // ── LANDING: 2 kotak besar (Materi & PR Guru) ──
+  const totalMateri=quickLinks.length;
+  const pendingPr=teacherTasks.filter(t=>!t.done).length;
+  document.getElementById('mainContent').innerHTML=`
+    <div class="page-title-area">
+      <div class="page-title" style="margin:0">Materi</div>
+      <div class="page-sub">Pusat materi les & pengingat tugas kamu.</div>
+    </div>
+    <div style="padding:0 20px 24px">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+        <button onclick="openMateriSection('materi')" style="position:relative;aspect-ratio:1;background:var(--card);border:1.5px solid var(--border);border-radius:22px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;cursor:pointer;box-shadow:var(--shadow-sm)">
+          <span style="font-size:2.4rem">🔗</span>
+          <span style="font-weight:800;font-size:0.95rem;color:var(--text)">Materi</span>
+          <span style="font-size:0.72rem;color:var(--muted)">${totalMateri} item</span>
+        </button>
+        <button onclick="openMateriSection('pr')" style="position:relative;aspect-ratio:1;background:var(--card);border:1.5px solid var(--border);border-radius:22px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;cursor:pointer;box-shadow:var(--shadow-sm)">
+          ${pendingPr?`<span style="position:absolute;top:12px;right:12px;min-width:22px;height:22px;padding:0 6px;border-radius:11px;background:var(--red);color:#fff;font-size:0.7rem;font-weight:800;display:flex;align-items:center;justify-content:center">${pendingPr}</span>`:''}
+          <span style="font-size:2.4rem">📝</span>
+          <span style="font-weight:800;font-size:0.95rem;color:var(--text)">PR Guru</span>
+          <span style="font-size:0.72rem;color:var(--muted)">${pendingPr?pendingPr+' belum selesai':'Semua beres ✓'}</span>
+        </button>
+      </div>
+    </div>`;
+}
+
+function openMateriSection(section){
+  materiSection=section;
+  history.pushState({tab:'links', view:'sub', section:section},'');
+  renderLinks();
+}
+function closeMateriSection(){
+  materiSection=null;
+  history.pushState({tab:'links', view:'main'},'');
+  renderLinks();
+}
+
+function renderMateriPrPage(){
+  document.getElementById('mainContent').innerHTML=`
+    <div class="page-title-area">
+      <div style="display:flex;align-items:center;gap:10px">
+        <button onclick="closeMateriSection()" style="flex-shrink:0;width:40px;height:40px;border-radius:12px;border:1.5px solid var(--border);background:var(--card);font-size:1.2rem;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:var(--shadow-xs)">←</button>
+        <div class="page-title" style="margin:0">📝 PR Guru</div>
+      </div>
+      <div class="page-sub">Pengingat tugas & rencana materi buat siswa kamu.</div>
+    </div>
+    <div style="padding:0 20px 24px">
+      ${teacherTasksHtml()}
+    </div>`;
+}
+
+function renderMateriListPage(){
   const folders=quickLinks.filter(l=>l.type==='folder');
   const topLinks=quickLinks.filter(l=>l.type!=='folder'&&!l.folderId);
 
@@ -3837,16 +3900,21 @@ function renderLinks(){
 
   document.getElementById('mainContent').innerHTML=
     `<div class="page-title-area">
-      <div class="page-title" style="margin:0">Materi</div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <button onclick="closeMateriSection()" style="flex-shrink:0;width:40px;height:40px;border-radius:12px;border:1.5px solid var(--border);background:var(--card);font-size:1.2rem;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:var(--shadow-xs)">←</button>
+        <div class="page-title" style="margin:0">🔗 Materi</div>
+      </div>
       <div class="page-sub">Tombol pintasan ke materi/link apa pun — tap untuk langsung dibuka.</div>
     </div>
     <div style="padding:0 20px 24px">
-      ${teacherTasksHtml()}
-      <div style="display:flex;gap:10px;margin-bottom:16px">
+      <div style="display:flex;gap:10px;margin-bottom:18px">
         <button onclick="openAddFolderModal()" style="flex:1;padding:14px;background:var(--card);color:var(--text);border:1.5px solid var(--border);border-radius:14px;font-family:sans-serif;font-weight:700;font-size:0.85rem;cursor:pointer">📁 Folder Baru</button>
         <button onclick="openAddLinkModal(null)" style="flex:1;padding:14px;background:var(--red);color:#fff;border:none;border-radius:14px;font-family:sans-serif;font-weight:700;font-size:0.85rem;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,0.12)">+ Tambah Tautan</button>
       </div>
-      ${isEmpty?`<div class="empty"><div class="empty-icon">🔗</div><div class="empty-t">Belum ada tautan</div><div class="empty-d">Buat folder untuk mengelompokkan tautan, atau tambah tautan langsung.</div></div>`:folderItems+linkItems}
+      ${isEmpty?`<div class="empty"><div class="empty-icon">🔗</div><div class="empty-t">Belum ada tautan</div><div class="empty-d">Buat folder untuk mengelompokkan tautan, atau tambah tautan langsung.</div></div>`:`
+      ${folders.length?`<div style="font-size:0.68rem;font-weight:700;color:var(--muted2);text-transform:uppercase;letter-spacing:0.06em;margin:0 2px 8px">📁 Folder (${folders.length})</div>${folderItems}`:''}
+      ${topLinks.length?`<div style="font-size:0.68rem;font-weight:700;color:var(--muted2);text-transform:uppercase;letter-spacing:0.06em;margin:${folders.length?'18':'0'}px 2px 8px">🔗 Tautan Langsung (${topLinks.length})</div>${linkItems}`:''}
+      `}
     </div>`;
 }
 
