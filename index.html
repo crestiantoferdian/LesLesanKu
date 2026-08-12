@@ -631,6 +631,17 @@ body{
         </div>
       </div>
     </div>
+    <!-- RIWAYAT RESCHEDULE -->
+    <div id="reschedule-section-form" style="display:none;border-top:1px dashed var(--border);margin-top:14px;padding-top:14px">
+      <div id="rescue-header-form" onclick="toggleFormSection('rescue-body-form','rescue-arrow-form')"
+        style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;padding:10px 14px;border-radius:12px;border:1.5px solid var(--border);background:var(--bg);user-select:none">
+        <span style="font-size:0.75rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em">🔄 Riwayat Reschedule</span>
+        <span id="rescue-arrow-form" style="font-size:0.75rem;color:var(--muted)">▶</span>
+      </div>
+      <div id="rescue-body-form" style="display:none;margin-top:10px">
+        <div id="form-reschedule-list" style="display:flex;flex-direction:column;gap:6px"></div>
+      </div>
+    </div>
     <div class="mfield" id="inactiveSinceWrap" style="display:none">
       <label>Nonaktif Sejak Tanggal</label>
       <input type="date" id="f_inactiveSince"/>
@@ -4613,6 +4624,8 @@ function openAdd(){
   document.getElementById('delBtn').style.display='none';
   document.getElementById('inactiveToggleBtn').style.display='none';
   document.getElementById('inactiveHint').style.display='none';
+  const rsSectionAdd=document.getElementById('reschedule-section-form');
+  if(rsSectionAdd) rsSectionAdd.style.display='none';
   ['f_name','f_inst','f_notes','f_phone','f_extra_note','f_initial_sessions','f_sheet_link','f_day2','f_time2a','f_time2b','f_day3','f_time3a','f_time3b','f_day4','f_time4a','f_time4b','f_rate'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   document.getElementById('f_pay_cycle').value='4';
   document.getElementById('f_admin_wa').value=adminWaNumber;
@@ -4678,6 +4691,15 @@ function openEdit(idx){
   document.getElementById('f_sheet_link').value=s.sheetLink||'';
   extraDates=s.extraDates?JSON.parse(JSON.stringify(s.extraDates)):[];
   setTimeout(renderExtraDates,100);
+  const rsSection=document.getElementById('reschedule-section-form');
+  if(rsSection){
+    rsSection.style.display=(s.reschedules&&s.reschedules.length)?'block':'none';
+    const rsBody=document.getElementById('rescue-body-form');
+    const rsArrow=document.getElementById('rescue-arrow-form');
+    if(rsBody) rsBody.style.display='none';
+    if(rsArrow) rsArrow.textContent='▶';
+    renderFormRescheduleList(s);
+  }
   document.getElementById('overlay').classList.add('open');
 }
 
@@ -5077,10 +5099,6 @@ function loadCustomMp3(input){
     setTimeout(testNotifSound, 300);
   };
   reader.readAsDataURL(file);
-}
-
-function testNotifSound(){
-  playNotifSound();
 }
 
 // ── PENGATURAN ────────────────────────────────────────
