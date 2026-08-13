@@ -671,6 +671,16 @@ body{
         <option value="alpa">✗  Alpa</option>
       </select>
     </div>
+    <div class="mfield" id="notePhotoWrap">
+      <label>📷 Foto Progress (opsional, maks 6)</label>
+      <div id="notePhotoPreviewGrid" style="display:none;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px"></div>
+      <div id="notePhotoBtnRow" style="display:flex;gap:8px">
+        <button type="button" id="notePhotoCameraBtn" onclick="document.getElementById('notePhotoCameraInput').click()" style="flex:1;padding:11px;background:var(--blue-bg);color:var(--blue);border:1px solid rgba(37,99,235,0.3);border-radius:11px;font-family:sans-serif;font-size:0.82rem;font-weight:700;cursor:pointer">📷 Ambil Foto</button>
+        <button type="button" id="notePhotoGalleryBtn" onclick="document.getElementById('notePhotoGalleryInput').click()" style="flex:1;padding:11px;background:var(--card2);color:var(--text);border:1px solid var(--border);border-radius:11px;font-family:sans-serif;font-size:0.82rem;font-weight:700;cursor:pointer">🖼️ Galeri</button>
+      </div>
+      <input type="file" id="notePhotoCameraInput" accept="image/*" capture="environment" style="display:none" onchange="loadNotePhoto(this)"/>
+      <input type="file" id="notePhotoGalleryInput" accept="image/*" multiple style="display:none" onchange="loadNotePhoto(this)"/>
+    </div>
     <div style="margin-bottom:14px">
       <div onclick="toggleNoteTimeEdit()" style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:0.76rem;color:var(--blue);font-weight:700">
         <span id="noteTimeToggleIcon">▸</span> Jam sesi ini salah? Perbaiki di sini
@@ -691,15 +701,15 @@ body{
       <label>📝 Catatan Progress / Materi Hari Ini</label>
       <textarea id="noteProgress" rows="4" placeholder="cth: Sudah sampai halaman 12, latihan tangga nada C mayor, PR: ulangi bar 5-8..."></textarea>
     </div>
-    <div class="mfield" id="notePhotoWrap">
-      <label>📷 Foto Progress (opsional, maks 6)</label>
-      <div id="notePhotoPreviewGrid" style="display:none;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px"></div>
-      <div id="notePhotoBtnRow" style="display:flex;gap:8px">
-        <button type="button" id="notePhotoCameraBtn" onclick="document.getElementById('notePhotoCameraInput').click()" style="flex:1;padding:11px;background:var(--blue-bg);color:var(--blue);border:1px solid rgba(37,99,235,0.3);border-radius:11px;font-family:sans-serif;font-size:0.82rem;font-weight:700;cursor:pointer">📷 Ambil Foto</button>
-        <button type="button" id="notePhotoGalleryBtn" onclick="document.getElementById('notePhotoGalleryInput').click()" style="flex:1;padding:11px;background:var(--card2);color:var(--text);border:1px solid var(--border);border-radius:11px;font-family:sans-serif;font-size:0.82rem;font-weight:700;cursor:pointer">🖼️ Galeri</button>
-      </div>
-      <input type="file" id="notePhotoCameraInput" accept="image/*" capture="environment" style="display:none" onchange="loadNotePhoto(this)"/>
-      <input type="file" id="notePhotoGalleryInput" accept="image/*" multiple style="display:none" onchange="loadNotePhoto(this)"/>
+    <div class="mfield" id="notePrSiswaWrap">
+      <label>📚 PR Siswa (opsional)</label>
+      <textarea id="notePrSiswa" rows="2" placeholder="cth: Latihan bar 5-8, hafalkan tangga nada C mayor untuk minggu depan"></textarea>
+      <div style="font-size:0.65rem;color:var(--muted);margin-top:3px">Tugas latihan buat siswa ini di rumah — tampil di riwayat & profil siswa</div>
+    </div>
+    <div class="mfield" id="notePrGuruWrap">
+      <label>✅ PR Guru (opsional)</label>
+      <textarea id="notePrGuru" rows="2" placeholder="cth: Siapkan lembar latihan bar 5-8 untuk sesi depan"></textarea>
+      <div style="font-size:0.65rem;color:var(--muted);margin-top:3px">Otomatis masuk ke daftar 📝 PR Guru di tab Materi</div>
     </div>
     <div class="mactions">
       <button class="mbtn mbtn-cancel" onclick="closeNoteModal()">Batal</button>
@@ -996,6 +1006,15 @@ function applySettings(){
 
 // ── DATE HELPERS ──────────────────────────────────────
 function todayStr(){const d=new Date();return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`}
+const MONTH_SHORT_ID=['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
+function fmtDateShort(dateKey){
+  if(!dateKey) return '';
+  const parts=dateKey.split('-');
+  if(parts.length!==3) return '';
+  const day=parseInt(parts[2],10), mo=parseInt(parts[1],10)-1;
+  if(isNaN(day)||isNaN(mo)||!MONTH_SHORT_ID[mo]) return '';
+  return day+' '+MONTH_SHORT_ID[mo];
+}
 function pad(n){return String(n).padStart(2,'0')}
 function todayDayName(){return DAYS[DAYS_JS.indexOf(new Date().getDay())]||'Senin'}
 function fmtPretty(str){return new Date(str+'T00:00:00').toLocaleDateString('id-ID',{weekday:'long',day:'numeric',month:'long',year:'numeric'})}
@@ -1506,6 +1525,7 @@ function renderAbsensi(){
           ${s._isExtra?`<span class="s-pill" style="background:#eef2ff;color:var(--blue);border-color:rgba(37,99,235,0.3)">➕ ${s._extraNote||'Tambahan Kelas'}</span>`:''}
         </div>
         ${note.progress?`<div class="s-note-preview">📝 ${note.progress}${notePhotosArr(note).length?' 📷'+(notePhotosArr(note).length>1?'×'+notePhotosArr(note).length:''):''}</div>`:(notePhotosArr(note).length?`<div class="s-note-preview">📷 ${notePhotosArr(note).length>1?notePhotosArr(note).length+' foto progress':'Ada foto progress'}</div>`:'')}
+        ${note.prSiswa?`<div class="s-note-preview" style="color:var(--blue)">📚 PR: ${note.prSiswa}</div>`:''}
         ${showPayWarn?`<div class="pay-warn" onclick="sendPaymentWA('${s.name}')">${payWarnLabel}</div>`:''}
         <div class="att-btns" onclick="event.stopPropagation()">
             ${samedayRs
@@ -1896,7 +1916,7 @@ function openNoteModal(attKey, status, displayName, dateOverride, timeOverride, 
       const noteKeyChk=dateKey+'_'+attKey;
       const noteKeyChk2=dateKey+'_'+name;
       const existingChk=attNotes[noteKeyChk]||attNotes[noteKeyChk2]||{};
-      const hasNote=!!(existingChk.reason||existingChk.progress);
+      const hasNote=!!(existingChk.reason||existingChk.progress||existingChk.prSiswa||existingChk.prGuru);
       window._pendingReset={attKey, dateKey, name, hasNote, noteKey: noteKeyChk, noteKey2: noteKeyChk2};
       const msg=hasNote
         ? '⚠️ Catatan progress <b>'+name+'</b> akan ikut terhapus jika direset!<br><br>Yakin ingin mereset kehadiran siswa ini?'
@@ -1909,7 +1929,7 @@ function openNoteModal(attKey, status, displayName, dateOverride, timeOverride, 
     const snapTime2=time2Override||s.time2||'';
     noteStudent={name:attKey,displayName:name,status:status,dateKey:dateKey,time:snapTime,time2:snapTime2};
     document.getElementById('noteTitle').textContent=status==='hadir'?'Catat Kehadiran':status==='izin'?'Catat Izin':'Catat Alpa';
-    document.getElementById('noteSub').textContent=name+(snapTime?' · '+snapTime+(snapTime2?'–'+snapTime2:''):'');
+    document.getElementById('noteSub').textContent=name+' · '+fmtDateShort(dateKey)+(snapTime?' · '+snapTime+(snapTime2?'–'+snapTime2:''):'');
     document.getElementById('noteTimeInput').value=snapTime;
     document.getElementById('noteTime2Input').value=snapTime2;
     document.getElementById('noteTimeEditWrap').style.display='none';
@@ -1919,6 +1939,8 @@ function openNoteModal(attKey, status, displayName, dateOverride, timeOverride, 
     const existing=attNotes[noteKey]||{};
     document.getElementById('noteReason').value=existing.reason||'';
     document.getElementById('noteProgress').value=existing.progress||'';
+    document.getElementById('notePrSiswa').value=existing.prSiswa||'';
+    document.getElementById('notePrGuru').value=existing.prGuru||'';
     notePhotosData=existing.photos?existing.photos.slice():(existing.photo?[existing.photo]:[]);
     renderNotePhotoPreview();
     onNoteStatusChange();
@@ -2145,7 +2167,7 @@ function openTrackEditModal(attKey, status, displayName, dateKey){
     const snapTime2=existingMeta.time2||s.time2||'';
     noteStudent={name:attKey, displayName:displayName, status:status, dateKey:dateKey, fromTrack:true, time:snapTime, time2:snapTime2};
     document.getElementById('noteTitle').textContent='✏️ Edit Catatan';
-    document.getElementById('noteSub').textContent=displayName+(snapTime?' · '+snapTime+(snapTime2?'–'+snapTime2:''):'');
+    document.getElementById('noteSub').textContent=displayName+' · '+fmtDateShort(dateKey)+(snapTime?' · '+snapTime+(snapTime2?'–'+snapTime2:''):'');
     document.getElementById('noteTimeInput').value=snapTime;
     document.getElementById('noteTime2Input').value=snapTime2;
     document.getElementById('noteTimeEditWrap').style.display='none';
@@ -2154,6 +2176,8 @@ function openTrackEditModal(attKey, status, displayName, dateKey){
     const existing=attNotes[noteKey]||{};
     document.getElementById('noteReason').value=existing.reason||'';
     document.getElementById('noteProgress').value=existing.progress||'';
+    document.getElementById('notePrSiswa').value=existing.prSiswa||'';
+    document.getElementById('notePrGuru').value=existing.prGuru||'';
     notePhotosData=existing.photos?existing.photos.slice():(existing.photo?[existing.photo]:[]);
     renderNotePhotoPreview();
     onNoteStatusChange();
@@ -2176,6 +2200,8 @@ function saveNote(){
     const status=document.getElementById('noteStatus').value;
     const reason=document.getElementById('noteReason').value.trim();
     const progress=document.getElementById('noteProgress').value.trim();
+    const prSiswa=document.getElementById('notePrSiswa').value.trim();
+    const prGuru=document.getElementById('notePrGuru').value.trim();
     const studentName=noteStudent.name; // this is attKey
     const displayName=noteStudent.displayName||studentName;
     attendance[dateKey][studentName]=status;
@@ -2188,8 +2214,9 @@ function saveNote(){
     const editedTime=(document.getElementById('noteTimeInput').value)||noteStudent.time||'';
     const editedTime2=(document.getElementById('noteTime2Input').value)||noteStudent.time2||'';
     if(editedTime) attMeta[noteKey]={time:editedTime,time2:editedTime2};
-    if(reason||progress||notePhotosData.length) attNotes[noteKey]={reason:reason,progress:progress,photos:notePhotosData.slice()};
+    if(reason||progress||prSiswa||prGuru||notePhotosData.length) attNotes[noteKey]={reason:reason,progress:progress,prSiswa:prSiswa,prGuru:prGuru,photos:notePhotosData.slice()};
     else delete attNotes[noteKey];
+    syncPrGuruTask(noteKey, prGuru, displayName, dateKey, editedTime);
     save();closeNoteModal();
     if(noteStudent&&noteStudent.fromTrack){
       currentTab="track";
@@ -2197,6 +2224,7 @@ function saveNote(){
       else if(viewingStudent) renderStudentProfile(viewingStudent, 'week');
       else renderTrack();
     }else render();
+    updateMateriBadge();
     const emoji=status==='hadir'?'✅':status==='izin'?'✋':'✗';
     toast(emoji+' '+displayName+' — '+status);
   }catch(e){
@@ -2454,6 +2482,29 @@ function toggleShowInactiveSiswa(){
 
 // ── PR / TUGAS GURU ────────────────────────────────────
 let editingTaskId=null;
+// Dipanggil dari saveNote(): sinkronkan isi field "PR Guru" di modal absensi
+// dengan daftar PR Guru di tab Materi — 1 catatan absensi = 1 tugas terhubung (via noteKey).
+function syncPrGuruTask(noteKey, text, displayName, dateKey, time){
+  const existingTask=teacherTasks.find(t=>t.fromAttendance&&t.noteKey===noteKey);
+  if(text){
+    if(existingTask){
+      existingTask.text=text;
+      existingTask.studentName=displayName;
+      existingTask.sessionDate=dateKey;
+      existingTask.sessionTime=time;
+    }else{
+      teacherTasks.unshift({
+        id:'task_'+Date.now()+'_'+Math.random().toString(36).slice(2,6),
+        text:text, done:false, createdAt:Date.now(),
+        fromAttendance:true, noteKey:noteKey,
+        studentName:displayName, sessionDate:dateKey, sessionTime:time
+      });
+    }
+  }else if(existingTask&&!existingTask.done){
+    // Field dikosongkan & tugas belum selesai -> hapus otomatis (belum ada progress yg hilang)
+    teacherTasks=teacherTasks.filter(t=>t!==existingTask);
+  }
+}
 function addTeacherTask(){
   const input=document.getElementById('taskInput');
   const text=input.value.trim();
@@ -2506,14 +2557,19 @@ function toggleTeacherTask(id){
   renderLinks();
 }
 function deleteTeacherTask(id){
-  teacherTasks=teacherTasks.filter(x=>x.id!==id);
-  save();
-  renderLinks();
+  const t=teacherTasks.find(x=>x.id===id);
+  if(!t) return;
+  showGenericConfirm('Hapus PR?', 'Anda yakin akan menghapus:<br><b>'+escapeHtml(t.text)+'</b>?', '🗑 Ya, Hapus', function(){
+    teacherTasks=teacherTasks.filter(x=>x.id!==id);
+    save();
+    renderLinks();
+    toast('🗑 PR dihapus');
+  }, true);
 }
 
 // ── DIALOG KONFIRMASI GENERIK ──────────────────────────
 // Bisa dipakai fitur mana pun yang butuh "yakin?" sebelum aksi, tanpa harus bikin overlay baru tiap kali.
-function showGenericConfirm(title, msg, confirmLabel, onConfirm){
+function showGenericConfirm(title, msg, confirmLabel, onConfirm, danger){
   let overlay=document.getElementById('genericConfirmOverlay');
   if(!overlay){
     overlay=document.createElement('div');
@@ -2532,7 +2588,9 @@ function showGenericConfirm(title, msg, confirmLabel, onConfirm){
   }
   document.getElementById('genericConfirmTitle').textContent=title;
   document.getElementById('genericConfirmMsg').innerHTML=msg;
-  document.getElementById('genericConfirmYesBtn').textContent=confirmLabel||'Ya';
+  const yesBtn=document.getElementById('genericConfirmYesBtn');
+  yesBtn.textContent=confirmLabel||'Ya';
+  yesBtn.style.background=danger?'var(--alpa)':'var(--hadir)';
   window._genericConfirmCallback=onConfirm;
   history.pushState({tab:currentTab, view:'modal'},'');
   overlay.classList.add('open');
@@ -2574,7 +2632,10 @@ function teacherTasksHtml(){
   const rowHtml=t=>`
     <div style="display:flex;align-items:center;gap:10px;background:var(--card);border:1px solid ${editingTaskId===t.id?'var(--blue)':'var(--border)'};border-radius:12px;padding:11px 12px;margin-bottom:8px">
       <button onclick="toggleTeacherTask('${t.id}')" style="flex-shrink:0;width:22px;height:22px;border-radius:7px;border:2px solid ${t.done?'var(--hadir)':'var(--border)'};background:${t.done?'var(--hadir)':'transparent'};color:#fff;font-size:0.72rem;cursor:pointer;display:flex;align-items:center;justify-content:center">${t.done?'✓':''}</button>
-      <span style="flex:1;min-width:0;font-size:0.85rem;${t.done?'color:var(--muted);text-decoration:line-through':'color:var(--text)'};word-break:break-word">${escapeHtml(t.text)}</span>
+      <div style="flex:1;min-width:0">
+        <span style="display:block;font-size:0.85rem;${t.done?'color:var(--muted);text-decoration:line-through':'color:var(--text)'};word-break:break-word">${escapeHtml(t.text)}</span>
+        ${t.fromAttendance?`<span style="display:block;font-size:0.68rem;color:var(--blue);font-weight:600;margin-top:2px">🕐 Ditulis saat sesi ${escapeHtml(t.studentName||'')}${t.sessionDate?' · '+fmtDateShort(t.sessionDate):''}${t.sessionTime?' · '+t.sessionTime:''}</span>`:''}
+      </div>
       <button onclick="editTeacherTask('${t.id}')" style="flex-shrink:0;width:26px;height:26px;border-radius:8px;border:none;background:none;color:var(--muted);font-size:0.85rem;cursor:pointer">✏️</button>
       <button onclick="deleteTeacherTask('${t.id}')" style="flex-shrink:0;width:26px;height:26px;border-radius:8px;border:none;background:none;color:var(--muted);font-size:0.9rem;cursor:pointer">🗑</button>
     </div>`;
@@ -2718,18 +2779,18 @@ function renderStudentProfile(name, period){
         let note = attNotes[dk+'_'+name]||{};
         let attKey = name;
         // Jika sesi reguler kosong, cek sesi tambahan (extra) di tanggal ini
-        if(!st&&!note.progress&&!note.reason){
+        if(!st&&!note.progress&&!note.reason&&!note.prSiswa){
           for(let ei=0; ei<extraCount; ei++){
             const ed=s.extraDates[ei];
             const ek=name+'_extra_'+(ed.id!==undefined&&ed.id!==null?ed.id:ei);
             const est=(attendance[dk]||{})[ek];
             const enote=attNotes[dk+'_'+ek]||{};
-            if(est||enote.progress||enote.reason){
+            if(est||enote.progress||enote.reason||enote.prSiswa){
               st=est; note=enote; attKey=ek; break;
             }
           }
         }
-        if(!st&&!note.progress&&!note.reason&&!notePhotosArr(note).length) return '';
+        if(!st&&!note.progress&&!note.reason&&!note.prSiswa&&!notePhotosArr(note).length) return '';
         const stLabel = st==='hadir'?'✅ Hadir':st==='izin'?'✋ Izin':st==='alpa'?'✗ Alpa':'';
         const stColor = st==='hadir'?'var(--hadir)':st==='izin'?'var(--izin)':'var(--alpa)';
         const safeName2=name.replace(/'/g,"\\'");
@@ -2749,6 +2810,7 @@ function renderStudentProfile(name, period){
           +'</div>'
           +(note.reason?'<div style="font-size:0.82rem;color:var(--text);background:#fffbeb;border-radius:9px;padding:8px 11px;margin-top:5px;border-left:3px solid var(--izin)">📋 '+note.reason+'</div>':'')
           +(note.progress?'<div style="font-size:0.82rem;color:var(--text);background:var(--blue-bg);border-radius:9px;padding:8px 11px;margin-top:6px;border-left:3px solid var(--blue)">📝 '+note.progress+'</div>':'')
+          +(note.prSiswa?'<div style="font-size:0.82rem;color:var(--text);background:#eef2ff;border-radius:9px;padding:8px 11px;margin-top:6px;border-left:3px solid var(--blue)">📚 PR: '+note.prSiswa+'</div>':'')
           +photoGridHtml(notePhotosArr(note))
           +'</div>';
       }).filter(Boolean).join('')
@@ -3107,6 +3169,7 @@ function buildDateDetail(dk){
 
     let noteHtml='';
     if(status==='hadir'&&note.progress) noteHtml=`<div style="font-size:0.7rem;color:var(--hadir);margin-top:3px">📝 ${note.progress}</div>`;
+    if(status==='hadir'&&note.prSiswa) noteHtml+=`<div style="font-size:0.7rem;color:var(--blue);margin-top:3px">📚 PR: ${note.prSiswa}</div>`;
     if(status==='alpa'&&note.reason) noteHtml=`<div style="font-size:0.7rem;color:var(--alpa);margin-top:3px">✗ ${note.reason}</div>`;
     if(status==='izin') noteHtml=`<div style="font-size:0.72rem;color:#d97706;font-weight:600;margin-top:3px">✋ Izin${note.reason?' · '+note.reason:''}</div>`;
     if(s._isOrphaned) noteHtml+=`<div style="font-size:0.68rem;color:var(--muted);margin-top:3px">📌 Jadwal sesi ini sudah diubah/dihapus — riwayatnya tetap dijaga di sini</div>`;
@@ -3580,7 +3643,7 @@ function renderHistoryDetail(){
   // Also get days with progress notes even if no explicit status
   const suffix='_'+name;
   const noteEntries=Object.keys(attNotes)
-    .filter(k=>k.endsWith(suffix)&&attNotes[k]?.progress)
+    .filter(k=>k.endsWith(suffix)&&(attNotes[k]?.progress||attNotes[k]?.prSiswa))
     .map(k=>k.slice(0, k.length - suffix.length))
     .filter(dk=>dk.match(/^\d{4}-\d{2}-\d{2}$/)&&!entries.includes(dk));
 
@@ -3605,8 +3668,9 @@ function renderHistoryDetail(){
       </div>
       ${note.reason?`<div class="hist-note">📋 ${note.reason}</div>`:''}
       ${note.progress?`<div class="hist-note" style="margin-top:6px;border-left:3px solid var(--blue);padding-left:10px">📝 ${note.progress}</div>`:''}
+      ${note.prSiswa?`<div class="hist-note" style="margin-top:6px;border-left:3px solid var(--blue);padding-left:10px">📚 PR: ${note.prSiswa}</div>`:''}
       ${photoGridHtml(notePhotosArr(note))}
-      ${!note.reason&&!note.progress&&!notePhotosArr(note).length?`<div class="hist-no-note">Tidak ada catatan</div>`:''}
+      ${!note.reason&&!note.progress&&!note.prSiswa&&!notePhotosArr(note).length?`<div class="hist-no-note">Tidak ada catatan</div>`:''}
     </div>`;
   }).join(''):`<div class="empty"><div class="empty-icon">📋</div><div class="empty-t">Belum ada histori</div><div class="empty-d">Mulai absen murid ini untuk melihat histori</div></div>`;
 
