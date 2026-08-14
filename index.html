@@ -307,7 +307,7 @@ body{
 .hist-status-pill.h{background:var(--hadir-bg);color:var(--hadir-text)}
 .hist-status-pill.i{background:var(--izin-bg);color:var(--izin-text)}
 .hist-status-pill.a{background:var(--alpa-bg);color:var(--alpa-text)}
-.hist-note{font-size:0.8rem;color:var(--text2);line-height:1.55;margin-top:6px;padding:10px 13px;background:var(--bg);border-radius:12px}
+.hist-note{font-size:0.8rem;color:var(--text2);line-height:1.55;margin-top:6px;padding:10px 13px;background:var(--bg);border-radius:12px;white-space:pre-wrap;word-break:break-word;max-height:260px;overflow-y:auto}
 .hist-no-note{font-size:0.77rem;color:var(--muted2);font-style:italic}
 
 /* ── KIRIM ── */
@@ -468,8 +468,8 @@ body{
 <div class="app-header">
   <div class="header-logo" id="schoolLogo">LLK</div>
   <div class="header-info">
-    <div class="header-name" id="schoolName">LesLesanKu</div>
-    <div class="header-sub" id="schoolSub">Aplikasi Manajemen Les</div>
+    <div class="header-name" id="schoolName">LLK</div>
+    <div class="header-sub" id="schoolSub">LesLesanKu</div>
   </div>
   <div class="header-time">
     <div class="header-clock" id="clockEl">00:00</div>
@@ -600,7 +600,6 @@ body{
           <option value="16">16x pertemuan</option>
         </select>
       </div>
-      <div class="mfield"><label>No. WA Admin</label><input id="f_admin_wa" type="tel" placeholder="cth: 08123456789"/></div>
     </div>
     <div class="mrow">
       <div class="mfield">
@@ -976,8 +975,8 @@ function hexToRgba(hex, alpha){
 
 function applySettings(){
   paymentMode=localStorage.getItem('llk_payment_mode')||'session';
-  const name=localStorage.getItem('rms_school_name')||'LesLesanKu';
-  const sub=localStorage.getItem('rms_school_sub')||'Aplikasi Manajemen Les';
+  const name=localStorage.getItem('rms_school_name')||'LLK';
+  const sub=localStorage.getItem('rms_school_sub')||'LesLesanKu';
   const logo=localStorage.getItem('rms_school_logo')||'LLK';
   const color=localStorage.getItem('rms_school_color')||'#c0392b';
   // Apply to header
@@ -1612,7 +1611,6 @@ function getDateKeyForDay(dayName){
 // Helper: count how many extra sessions have been attended
 // ── EXTRA DATES ──────────────────────────────────────
 let extraDates = []; // array of {date, time, time2} for current edit
-let adminWaNumber = localStorage.getItem('rms4_admin_wa')||'';
 
 // Helper: get students scheduled for a day (including reschedule + tambahan)
 function getStudentsForDay(dayName, dateKey, includeInactive){
@@ -2351,11 +2349,6 @@ function siswaCardHtml(s,total,cycle,isDue){
     const isMonthly=paymentMode==='monthly';
     const sessInCycle=total%cycle;
     const remaining=isDue?0:cycle-sessInCycle;
-    const adminWa=(s.adminWa||adminWaNumber||'').replace(/\D/g,'').replace(/^0/,'');
-    const jadwalStr=s.day+' '+s.time+(s.time2?'-'+s.time2:'')+(s.day2?' & '+s.day2+' '+s.time2b+(s.time2c?'-'+s.time2c:''):'');
-    const keteranganStr=isMonthly?'(tagihan akhir bulan)':'(siklus '+cycle+'x)';
-    const waText=fillTemplate(getPaymentTemplate('admin'),{nama:s.name,instrumen:s.instrument||'-',jadwal:jadwalStr,total:total,keterangan:keteranganStr,siklus:cycle,salam:getGreetingID()});
-    const waLink=adminWa?'https://wa.me/62'+adminWa+'?text='+encodeURIComponent(waText):'';
 
     const borderColor=isDue?'rgba(192,57,43,0.4)':'var(--border)';
     const bgColor=isDue?'#fff9f9':'var(--card)';
@@ -2380,9 +2373,7 @@ function siswaCardHtml(s,total,cycle,isDue){
     html+='</div>';
     if(isDue&&!paymentOff){
       html+='<div style="display:flex;gap:8px;margin-top:10px">';
-      if(waLink){
-        html+='<button onclick="openWaLink(\''+waLink+'\')" style="flex:1;padding:11px;background:#25d366;color:#fff;border:none;border-radius:11px;font-family:sans-serif;font-size:0.82rem;font-weight:700;cursor:pointer">💬 WA Admin</button>';
-      }
+      html+='<button onclick="sendPaymentWA(\''+safeName+'\')" style="flex:1;padding:11px;background:#25d366;color:#fff;border:none;border-radius:11px;font-family:sans-serif;font-size:0.82rem;font-weight:700;cursor:pointer">💬 Tagih ke Ortu</button>';
       html+='<button onclick="confirmMarkPaid(this,\''+safeName+'\')" style="flex:1;padding:11px;background:#fff;color:#27ae60;border:2px solid #27ae60;border-radius:11px;font-family:sans-serif;font-size:0.82rem;font-weight:700;cursor:pointer">✅ Sudah Bayar</button>';
       html+='</div>';
     }
@@ -2808,9 +2799,9 @@ function renderStudentProfile(name, period){
               +'style="width:28px;height:28px;border-radius:8px;border:1.5px solid var(--border);background:var(--bg);color:var(--muted);font-size:0.75rem;cursor:pointer;display:flex;align-items:center;justify-content:center">✏️</button>'
             +'</div>'
           +'</div>'
-          +(note.reason?'<div style="font-size:0.82rem;color:var(--text);background:#fffbeb;border-radius:9px;padding:8px 11px;margin-top:5px;border-left:3px solid var(--izin)">📋 '+note.reason+'</div>':'')
-          +(note.progress?'<div style="font-size:0.82rem;color:var(--text);background:var(--blue-bg);border-radius:9px;padding:8px 11px;margin-top:6px;border-left:3px solid var(--blue)">📝 '+note.progress+'</div>':'')
-          +(note.prSiswa?'<div style="font-size:0.82rem;color:var(--text);background:#eef2ff;border-radius:9px;padding:8px 11px;margin-top:6px;border-left:3px solid var(--blue)">📚 PR: '+note.prSiswa+'</div>':'')
+          +(note.reason?'<div style="font-size:0.82rem;color:var(--text);background:#fffbeb;border-radius:9px;padding:8px 11px;margin-top:5px;border-left:3px solid var(--izin);white-space:pre-wrap;word-break:break-word;max-height:260px;overflow-y:auto">📋 '+note.reason+'</div>':'')
+          +(note.progress?'<div style="font-size:0.82rem;color:var(--text);background:var(--blue-bg);border-radius:9px;padding:8px 11px;margin-top:6px;border-left:3px solid var(--blue);white-space:pre-wrap;word-break:break-word;max-height:260px;overflow-y:auto">📝 '+note.progress+'</div>':'')
+          +(note.prSiswa?'<div style="font-size:0.82rem;color:var(--text);background:#eef2ff;border-radius:9px;padding:8px 11px;margin-top:6px;border-left:3px solid var(--blue);white-space:pre-wrap;word-break:break-word;max-height:260px;overflow-y:auto">📚 PR: '+note.prSiswa+'</div>':'')
           +photoGridHtml(notePhotosArr(note))
           +'</div>';
       }).filter(Boolean).join('')
@@ -4360,10 +4351,9 @@ function restorePrefixedData(obj){
 // Pengaturan tunggal (branding, nomor admin WA, preferensi notifikasi) yang juga perlu ikut backup
 const BACKUP_SETTINGS_KEYS=[
   'rms_school_name','rms_school_sub','rms_school_logo','rms_school_logo_img','rms_school_color',
-  'rms4_admin_wa',
   'llk_notif_sound','llk_notif_volume','llk_notif_custom_mp3','llk_notif_custom_name',
   'llk_notif_sheet_time','llk_notif_kirim_time','llk_income_hidden','llk_payment_mode',
-  'llk_tpl_session','llk_tpl_monthly','llk_tpl_admin'
+  'llk_tpl_session','llk_tpl_monthly'
 ];
 function collectSettingsData(){
   const out={};
@@ -4706,7 +4696,6 @@ function openAdd(){
   if(rsSectionAdd) rsSectionAdd.style.display='none';
   ['f_name','f_inst','f_notes','f_phone','f_extra_note','f_initial_sessions','f_sheet_link','f_day2','f_time2a','f_time2b','f_day3','f_time3a','f_time3b','f_day4','f_time4a','f_time4b','f_rate'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   document.getElementById('f_pay_cycle').value='4';
-  document.getElementById('f_admin_wa').value=adminWaNumber;
   extraDates=[];
   setTimeout(renderExtraDates,100);
   document.getElementById('f_day').value=selectedDay||DAYS[0];
@@ -4765,7 +4754,6 @@ function openEdit(idx){
   document.getElementById('f_initial_sessions').value=s.initialSessions||'';
   document.getElementById('f_pay_cycle').value=s.payCycle||4;
   document.getElementById('f_rate').value=s.rate||'';
-  document.getElementById('f_admin_wa').value=s.adminWa||adminWaNumber||'';
   document.getElementById('f_sheet_link').value=s.sheetLink||'';
   extraDates=s.extraDates?JSON.parse(JSON.stringify(s.extraDates)):[];
   setTimeout(renderExtraDates,100);
@@ -4869,9 +4857,6 @@ function renderExtraDates(){
 }
 
 function doSave(){
-  // Save admin WA globally
-  const newAdminWa=document.getElementById('f_admin_wa').value.trim();
-  if(newAdminWa){adminWaNumber=newAdminWa;localStorage.setItem('rms4_admin_wa',newAdminWa);}
   const s={
     name:document.getElementById('f_name').value.trim(),
     instrument:document.getElementById('f_inst').value.trim(),
@@ -4894,7 +4879,6 @@ function doSave(){
     payCycle:parseInt(document.getElementById('f_pay_cycle').value)||4,
     rate:parseInt(document.getElementById('f_rate').value)||40000,
     initialSessions:parseInt(document.getElementById('f_initial_sessions').value)||0,
-    adminWa:document.getElementById('f_admin_wa').value.trim(),
     sheetLink:document.getElementById('f_sheet_link').value.trim(),
   };
   if(!s.name){toast('❌ Nama wajib diisi!');return}
@@ -5018,7 +5002,6 @@ function renderPaymentSettings(){
 
   const sessionActive=paymentMode==='session';
   const monthlyActive=paymentMode==='monthly';
-  const adminActive=paymentMode!=='off';
   const boxStyle=(active)=>active
     ?'background:#fff5f5;border:2px solid var(--red);border-radius:16px;padding:16px;margin-bottom:16px'
     :'background:var(--card);border:1px solid var(--border);border-radius:16px;padding:16px;margin-bottom:16px';
@@ -5053,16 +5036,6 @@ function renderPaymentSettings(){
         <div style="display:flex;gap:8px;margin-top:10px">
           <button onclick="savePaymentTemplate('monthly')" style="flex:1;padding:10px;background:var(--red);color:#fff;border:none;border-radius:10px;font-family:sans-serif;font-size:0.8rem;font-weight:700;cursor:pointer">💾 Simpan</button>
           <button onclick="resetPaymentTemplate('monthly')" style="padding:10px 14px;background:#fff;color:var(--muted);border:1.5px solid var(--border);border-radius:10px;font-family:sans-serif;font-size:0.8rem;font-weight:700;cursor:pointer">↩️ Default</button>
-        </div>
-      </div>
-      <div style="${boxStyle(adminActive)}">
-        <div style="font-size:0.98rem;font-weight:800;color:var(--text);letter-spacing:0.01em;margin-bottom:4px">💬 Template Pesan · WA Admin${activeTag(adminActive)}</div>
-        <div style="font-size:0.72rem;color:var(--muted);margin-bottom:10px">Dipakai saat menekan tombol "WA Admin" di kartu Siswa — ini pesan ke nomor admin/kamu sendiri, bukan ke siswa.</div>
-        <textarea id="tplAdminInput" rows="6" style="width:100%;font-family:'DM Sans',sans-serif;font-size:0.82rem;border:1.5px solid var(--border);border-radius:10px;padding:10px;background:var(--card2);color:var(--text);resize:vertical">${escapeHtml(getPaymentTemplate('admin'))}</textarea>
-        <div style="font-size:0.68rem;color:var(--muted);margin-top:6px;line-height:1.5">Variabel: <code>{nama}</code> <code>{instrumen}</code> <code>{jadwal}</code> <code>{total}</code> <code>{keterangan}</code></div>
-        <div style="display:flex;gap:8px;margin-top:10px">
-          <button onclick="savePaymentTemplate('admin')" style="flex:1;padding:10px;background:var(--red);color:#fff;border:none;border-radius:10px;font-family:sans-serif;font-size:0.8rem;font-weight:700;cursor:pointer">💾 Simpan</button>
-          <button onclick="resetPaymentTemplate('admin')" style="padding:10px 14px;background:#fff;color:var(--muted);border:1.5px solid var(--border);border-radius:10px;font-family:sans-serif;font-size:0.8rem;font-weight:700;cursor:pointer">↩️ Default</button>
         </div>
       </div>
       <div style="text-align:center;padding:0 8px 16px;font-size:0.72rem;color:var(--muted);line-height:1.5">Perubahan mode & template langsung berlaku di tab Absensi & Siswa.</div>
@@ -5182,8 +5155,8 @@ function loadCustomMp3(input){
 // ── PENGATURAN ────────────────────────────────────────
 function renderPengaturan(){
   history.pushState({tab:'lainnya', view:'sub'},'');
-  const name=localStorage.getItem('rms_school_name')||'LesLesanKu';
-  const sub=localStorage.getItem('rms_school_sub')||'Aplikasi Manajemen Les';
+  const name=localStorage.getItem('rms_school_name')||'LLK';
+  const sub=localStorage.getItem('rms_school_sub')||'LesLesanKu';
   const logo=localStorage.getItem('rms_school_logo')||'LLK';
   const color=localStorage.getItem('rms_school_color')||'#c0392b';
 
@@ -5208,21 +5181,21 @@ function renderPengaturan(){
       <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;overflow:hidden;margin-bottom:10px">
 
         <div style="padding:14px 16px;border-bottom:1px solid var(--border)">
-          <div style="font-size:0.72rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px">Nama Aplikasi / Sekolah</div>
+          <div style="font-size:0.72rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px">Nama singkatan Kursus/Sekolah yang kamu dirikan</div>
           <input id="set_name" type="text" value="${name}" maxlength="30"
             oninput="document.getElementById('prevName').textContent=this.value"
             style="width:100%;background:var(--bg);border:1.5px solid var(--border);color:var(--text);font-family:sans-serif;font-size:0.9rem;padding:10px 12px;border-radius:10px;outline:none"/>
         </div>
 
         <div style="padding:14px 16px;border-bottom:1px solid var(--border)">
-          <div style="font-size:0.72rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px">Tagline / Nama Lengkap</div>
+          <div style="font-size:0.72rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px">Nama Panjang Kursus/Sekolah yang kamu dirikan</div>
           <input id="set_sub" type="text" value="${sub}" maxlength="40"
             oninput="document.getElementById('prevSub').textContent=this.value"
             style="width:100%;background:var(--bg);border:1.5px solid var(--border);color:var(--text);font-family:sans-serif;font-size:0.9rem;padding:10px 12px;border-radius:10px;outline:none"/>
         </div>
 
         <div style="padding:14px 16px;border-bottom:1px solid var(--border)">
-          <div style="font-size:0.72rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px">Logo Sekolah</div>
+          <div style="font-size:0.72rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px">Logo Kursus/Sekolah kamu</div>
           <!-- Upload area -->
           <div id="logoUploadArea" onclick="document.getElementById('logoFileInput').click()"
             style="width:100%;min-height:90px;border:2px dashed var(--border);border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;cursor:pointer;background:var(--bg);transition:border-color 0.2s;margin-bottom:10px;position:relative;overflow:hidden">
@@ -5366,8 +5339,8 @@ function updatePreviewColor(val){
 }
 
 function savePengaturan(){
-  const name=document.getElementById('set_name').value.trim()||'LesLesanKu';
-  const sub=document.getElementById('set_sub').value.trim()||'Aplikasi Manajemen Les';
+  const name=document.getElementById('set_name').value.trim()||'LLK';
+  const sub=document.getElementById('set_sub').value.trim()||'LesLesanKu';
   const logo=document.getElementById('set_logo').value.trim().substring(0,4)||'LLK';
   const color=document.getElementById('set_color').value||'#c0392b';
   localStorage.setItem('rms_school_name',name);
