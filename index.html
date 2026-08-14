@@ -1477,11 +1477,13 @@ function renderAbsensi(){
     const isAlpa=status==='alpa';
     const izinReason=note.reason||'';
     const alpaReason=note.reason||'';
+    const isHadir=status==='hadir'&&!samedayRs&&!hasActiveReschedule;
     // Tentukan border, badge, warna
     const borderLeft=samedayRs?'border-left:3px solid #7c3aed;'
       :hasActiveReschedule?'border-left:3px solid #f59e0b;'
       :isIzin?'border-left:3px solid #f97316;'
-      :isAlpa?'border-left:3px solid #dc2626;':'';
+      :isAlpa?'border-left:3px solid #dc2626;'
+      :isHadir?'border-left:4px solid var(--hadir);background:var(--hadir-bg);':'';
     const avatarOpacity=samedayRs||hasActiveReschedule||isIzin||isAlpa?'opacity:0.5;':'';
     const badgeHtml=samedayRs
       ?'<div style="position:absolute;bottom:-2px;right:-2px;width:14px;height:14px;background:#7c3aed;border-radius:50%;font-size:9px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:900;border:1.5px solid #fff">🔄</div>'
@@ -1491,6 +1493,8 @@ function renderAbsensi(){
       ?'<div style="position:absolute;bottom:-2px;right:-2px;width:14px;height:14px;background:#f97316;border-radius:50%;font-size:9px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:900;border:1.5px solid #fff">✋</div>'
       :isAlpa
       ?'<div style="position:absolute;bottom:-2px;right:-2px;width:14px;height:14px;background:#dc2626;border-radius:50%;font-size:9px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:900;border:1.5px solid #fff">✗</div>'
+      :isHadir
+      ?'<div style="position:absolute;bottom:-2px;right:-2px;width:14px;height:14px;background:var(--hadir);border-radius:50%;font-size:9px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:900;border:1.5px solid #fff">✓</div>'
       :'';
     const nameColor=samedayRs||hasActiveReschedule||isIzin||isAlpa?'color:var(--muted);':'';
     const timeColor=hasActiveReschedule?'#f59e0b':isIzin?'#f97316':isAlpa?'#dc2626':status==='hadir'?'var(--blue)':'var(--text)';
@@ -2749,7 +2753,7 @@ function renderStudentProfile(name, period){
   const billing    = countSessionsForBilling(name);
   const cycle      = s.payCycle||4;
   const remaining  = cycle-(billing%cycle===0&&billing>0?cycle:billing%cycle);
-  const isDue      = billing>0&&billing%cycle===0;
+  const isDue      = computeIsDue(s).isDue;
 
   // Period buttons
   const periods = [
@@ -2812,7 +2816,7 @@ function renderStudentProfile(name, period){
     +(s.day2?' & '+s.day2+' '+(s.time2a||'')+(s.time2b?'–'+s.time2b:''):'')+(s.day3?' & '+s.day3+' '+(s.time3a||'')+(s.time3b?'–'+s.time3b:''):'')+(s.day4?' & '+s.day4+' '+(s.time4a||'')+(s.time4b?'–'+s.time4b:''):'');
 
   // Billing card
-  const billingCard = '<div style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:15px 16px;margin-bottom:12px">'
+  const billingCard = paymentMode==='off'?'':'<div style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:15px 16px;margin-bottom:12px">'
     +'<div style="font-size:0.68rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.09em;margin-bottom:10px">💳 Info Pembayaran</div>'
     +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">'
       +'<div style="text-align:center;background:var(--bg);border-radius:10px;padding:10px 6px">'
@@ -2820,12 +2824,12 @@ function renderStudentProfile(name, period){
         +'<div style="font-size:0.58rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em;margin-top:2px">Sesi Berjalan</div>'
       +'</div>'
       +'<div style="text-align:center;background:var(--bg);border-radius:10px;padding:10px 6px">'
-        +'<div style="font-size:1.5rem;font-weight:800;color:var(--blue)">'+cycle+'x</div>'
+        +'<div style="font-size:1.5rem;font-weight:800;color:var(--blue)">'+(paymentMode==='monthly'?'Bulanan':cycle+'x')+'</div>'
         +'<div style="font-size:0.58rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em;margin-top:2px">Siklus Bayar</div>'
       +'</div>'
       +'<div style="text-align:center;background:'+(isDue?'var(--alpa-bg)':'var(--bg)')+';border-radius:10px;padding:10px 6px;border:1px solid '+(isDue?'rgba(220,38,38,0.2)':'transparent')+'">'
-        +'<div style="font-size:1.5rem;font-weight:800;color:'+(isDue?'var(--alpa)':'var(--muted)')+'">'+( isDue?'Bayar!':remaining+'x')+'</div>'
-        +'<div style="font-size:0.58rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em;margin-top:2px">'+(isDue?'Tagihan':'Sisa Sesi')+'</div>'
+        +'<div style="font-size:'+(isDue||paymentMode!=='monthly'?'1.5rem':'0.95rem')+';font-weight:800;color:'+(isDue?'var(--alpa)':'var(--muted)')+'">'+(isDue?'Bayar!':(paymentMode==='monthly'?'Akhir Bulan':remaining+'x'))+'</div>'
+        +'<div style="font-size:0.58rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em;margin-top:2px">'+(isDue?'Tagihan':(paymentMode==='monthly'?'Ditagih':'Sisa Sesi'))+'</div>'
       +'</div>'
     +'</div>'
   +'</div>';
@@ -3611,7 +3615,7 @@ function buildTrackCards(){
     const isVokal=(s.instrument||'').toLowerCase().includes('vok');
     const {h,i,a}=allTotals(s.name);
     const total=countSessions(s.name);
-    const showPay=countSessionsForBilling(s.name)>0&&countSessionsForBilling(s.name)%(s.payCycle||4)===0;
+    const showPay=computeIsDue(s).isDue;
     return `<div class="track-card" onclick="openHistoryDetail('${s.name}')">
       <div class="track-top">
         <div class="track-avatar ${isVokal?'vocal':''}">${icon}</div>
@@ -3622,7 +3626,7 @@ function buildTrackCards(){
           <div class="track-num-col"><div class="track-num a">${a}</div><div class="track-num-label">Alpa</div></div>
         </div>
       </div>
-      ${showPay?`<div class="track-notes"><span class="pay-pill">💳 ${total}x pertemuan — cek pembayaran</span></div>`:''}
+      ${showPay?`<div class="track-notes"><span class="pay-pill">💳 ${paymentMode==='monthly'?'Waktunya bayar (akhir bulan)':total+'x pertemuan — cek pembayaran'}</span></div>`:''}
     </div>`;
   }).join('');
 }
