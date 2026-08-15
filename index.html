@@ -1797,6 +1797,23 @@ function countSessionsForBilling(name){
   return total-lastPaid;
 }
 
+function countSessionsThisMonth(name){
+  // Khusus mode "Ingatkan Setiap Akhir Bulan": hitung sesi HANYA di bulan
+  // kalender berjalan (bulan lalu yang sudah lewat/sudah dibayar tidak ikut
+  // terhitung), beda dengan countSessionsForBilling yang akumulatif sejak
+  // lastPaidAt (dipakai untuk mode per-siklus sesi).
+  const monthPrefix=getMonthKey();
+  let count=0;
+  Object.entries(attendance).forEach(([dk,dayAtt])=>{
+    if(!dk.startsWith(monthPrefix)) return;
+    if(dayAtt[name]==='hadir'||dayAtt[name]==='alpa') count++;
+    Object.keys(dayAtt).forEach(k=>{
+      if(k.startsWith(name+'_extra_')&&(dayAtt[k]==='hadir'||dayAtt[k]==='alpa')) count++;
+    });
+  });
+  return count;
+}
+
 // ── PAYMENT REMINDER MODE ─────────────────────────────
 // 'session' = ingatkan tiap kelipatan sesi yang disepakati (default/lama)
 // 'monthly' = ingatkan semua siswa aktif di akhir bulan
@@ -1808,7 +1825,7 @@ function isEndOfMonthWindow(){
   return d.getDate()>=daysInM-2; // 3 hari terakhir bulan berjalan
 }
 function computeIsDue(s){
-  const total=countSessionsForBilling(s.name);
+  const total=paymentMode==='monthly'?countSessionsThisMonth(s.name):countSessionsForBilling(s.name);
   const cycle=s.payCycle||4;
   let isDue=false;
   if(paymentMode==='session'){
@@ -2750,7 +2767,7 @@ function renderStudentProfile(name, period){
   const alpaPer    = filtered.filter(dk=>statusOnDate(dk)==='alpa').length;
 
   // Billing info
-  const billing    = countSessionsForBilling(name);
+  const billing    = paymentMode==='monthly'?countSessionsThisMonth(name):countSessionsForBilling(name);
   const cycle      = s.payCycle||4;
   const remaining  = cycle-(billing%cycle===0&&billing>0?cycle:billing%cycle);
   const isDue      = computeIsDue(s).isDue;
