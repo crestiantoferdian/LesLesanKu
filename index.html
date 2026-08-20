@@ -23,7 +23,7 @@
 <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
 <script>
   window.OneSignalDeferred = window.OneSignalDeferred || [];
-  const ONESIGNAL_APP_ID = "GANTI_DENGAN_APP_ID_ONESIGNAL";
+  const ONESIGNAL_APP_ID = "a19b07d7-696d-4f0f-abb5-07320509dadb";
   if(ONESIGNAL_APP_ID.indexOf('GANTI_DENGAN')!==0){
     OneSignalDeferred.push(async function(OneSignal) {
       await OneSignal.init({ appId: ONESIGNAL_APP_ID });
@@ -1132,7 +1132,7 @@ checkNotifications();
 
 // ── PUSH NOTIFICATION (ONESIGNAL) — persiapan, aktif setelah setup malam ini ──
 // GANTI dengan URL Cloudflare Worker kamu (lihat file onesignal-bridge-worker.js)
-const NOTIF_BRIDGE_URL = "GANTI_DENGAN_URL_WORKER_KAMU";
+const NOTIF_BRIDGE_URL = "https://llk-onesignal-bridge.crestiantoferdian.workers.dev";
 
 function pushNotifReady(){
   return typeof OneSignal!=='undefined' && NOTIF_BRIDGE_URL.indexOf('GANTI_DENGAN')!==0;
