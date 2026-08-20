@@ -11,6 +11,26 @@
 <meta name="apple-mobile-web-app-title" content="LesLesanKu"/>
 <link rel="manifest" href="manifest.json"/>
 
+<!-- ═══ ONESIGNAL PUSH NOTIFICATION ═══
+  Malam ini setelah daftar OneSignal & dapat App ID:
+  1. Cari teks GANTI_DENGAN_APP_ID_ONESIGNAL di bawah ini, ganti dengan App ID asli.
+  2. Cek juga "Web SDK Setup" di dashboard OneSignal — kalau snippet resmi mereka
+     beda dari yang di bawah (URL CDN dsb berubah versi), PAKAI YANG DARI DASHBOARD,
+     itu paling akurat untuk akunmu. Ini cuma starting point.
+  3. Kalau App ID belum diganti, script ini aman — cuma diam/gagal tanpa bikin
+     LLK error, jadi nggak masalah kalau belum sempat malam ini.
+-->
+<script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
+<script>
+  window.OneSignalDeferred = window.OneSignalDeferred || [];
+  const ONESIGNAL_APP_ID = "GANTI_DENGAN_APP_ID_ONESIGNAL";
+  if(ONESIGNAL_APP_ID.indexOf('GANTI_DENGAN')!==0){
+    OneSignalDeferred.push(async function(OneSignal) {
+      await OneSignal.init({ appId: ONESIGNAL_APP_ID });
+    });
+  }
+</script>
+
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;0,9..40,800;1,9..40,400&display=swap" rel="stylesheet"/>
 <style>
 :root{
@@ -1109,6 +1129,60 @@ function checkKirimCopyReminder(dateKey){
 }
 setInterval(checkNotifications,30000);
 checkNotifications();
+
+// ── PUSH NOTIFICATION (ONESIGNAL) — persiapan, aktif setelah setup malam ini ──
+// GANTI dengan URL Cloudflare Worker kamu (lihat file onesignal-bridge-worker.js)
+const NOTIF_BRIDGE_URL = "GANTI_DENGAN_URL_WORKER_KAMU";
+
+function pushNotifReady(){
+  return typeof OneSignal!=='undefined' && NOTIF_BRIDGE_URL.indexOf('GANTI_DENGAN')!==0;
+}
+
+// Dipanggil dari tombol "Aktifkan Notifikasi Push" di Pengaturan Notifikasi
+async function enablePushNotif(){
+  if(typeof OneSignalDeferred==='undefined'){
+    toast('⚠️ Push notification belum di-setup — lihat catatan di index.html');
+    return;
+  }
+  try{
+    OneSignalDeferred.push(async function(OneSignal){
+      await OneSignal.Notifications.requestPermission();
+      const granted = OneSignal.Notifications.permission;
+      if(granted){
+        localStorage.setItem('llk_push_enabled','1');
+        toast('✅ Notifikasi push aktif!');
+      }else{
+        toast('❌ Izin notifikasi ditolak — bisa diaktifkan lagi lewat pengaturan HP');
+      }
+      renderNotifSettings();
+    });
+  }catch(e){
+    console.warn('enablePushNotif error:', e);
+    toast('❌ Gagal mengaktifkan — cek console');
+  }
+}
+
+// Kirim permintaan ke "jembatan" (Cloudflare Worker) supaya OneSignal
+// menjadwalkan 1 notifikasi terjadwal untuk sesi ini.
+// Dipanggil dari saveStudent()/doSave() setiap kali jadwal siswa disimpan.
+// TODO malam ini: panggil fungsi ini dari alur simpan jadwal siswa.
+async function scheduleReminderPush(studentName, isoDateTime, message){
+  if(!pushNotifReady()) return; // diam saja kalau belum di-setup, tidak bikin error
+  if(!localStorage.getItem('llk_push_enabled')) return; // user belum aktifkan
+  try{
+    await fetch(NOTIF_BRIDGE_URL, {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        title: `🎵 ${studentName} dalam 5 menit!`,
+        message: message||'',
+        send_after: isoDateTime // format ISO, contoh: 2026-08-20T14:25:00+07:00
+      })
+    });
+  }catch(e){
+    console.warn('scheduleReminderPush gagal (tidak fatal):', e);
+  }
+}
 
 let notifTimer;
 
@@ -5096,6 +5170,14 @@ function renderNotifSettings(){
       <div class="page-sub">Atur suara dan volume notifikasi jadwal les.</div>
     </div>
     <div style="padding:0 16px 24px">
+      <div style="background:${localStorage.getItem('llk_push_enabled')?'var(--hadir-bg)':'#fff5f5'};border:1.5px solid ${localStorage.getItem('llk_push_enabled')?'var(--hadir)':'var(--red)'};border-radius:16px;padding:16px;margin-bottom:16px">
+        <div style="font-size:0.72rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px">🔔 Notifikasi Latar Belakang (Push)</div>
+        <div style="font-size:0.8rem;color:var(--text);margin-bottom:12px;line-height:1.5">${localStorage.getItem('llk_push_enabled')?'Aktif — reminder tetap masuk walau LLK ditutup total.':'Belum aktif — reminder cuma jalan kalau LLK sedang dibuka.'}</div>
+        <button onclick="enablePushNotif()"
+          style="width:100%;padding:12px;background:${localStorage.getItem('llk_push_enabled')?'var(--hadir)':'var(--red)'};color:#fff;border:none;border-radius:10px;font-family:sans-serif;font-size:0.85rem;font-weight:700;cursor:pointer">
+          ${localStorage.getItem('llk_push_enabled')?'✓ Notifikasi Aktif':'🔔 Aktifkan Notifikasi Push'}
+        </button>
+      </div>
       <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:16px;margin-bottom:16px">
         <div style="font-size:0.72rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:12px">Pilih Suara</div>
         ${soundOptions}
