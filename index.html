@@ -5785,11 +5785,11 @@ function clearReschedule(){
 </div>
 
 <script>
-if('serviceWorker' in navigator){
-  window.addEventListener('load', function(){
-    navigator.serviceWorker.register('sw.js').catch(function(){});
-  });
-}
+// Registrasi sw.js terpisah DIMATIKAN sejak OneSignal aktif — kode sw.js
+// sekarang "dipinjam" oleh OneSignalSDKWorker.js lewat importScripts(),
+// jadi cukup 1 service worker (punya OneSignal) yang mendaftar, supaya
+// tidak rebutan scope dengan push notification. Lihat OneSignalSDKWorker.js.
 </script>
+
 </body>
 </html>
