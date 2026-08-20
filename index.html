@@ -1164,9 +1164,7 @@ async function enablePushNotif(){
 
 // Kirim permintaan ke "jembatan" (Cloudflare Worker) supaya OneSignal
 // menjadwalkan 1 notifikasi terjadwal untuk sesi ini.
-// Dipanggil dari saveStudent()/doSave() setiap kali jadwal siswa disimpan.
-// TODO malam ini: panggil fungsi ini dari alur simpan jadwal siswa.
-async function scheduleReminderPush(studentName, isoDateTime, message){
+async function scheduleReminderPush(title, message, isoDateTime){
   if(!pushNotifReady()) return; // diam saja kalau belum di-setup, tidak bikin error
   if(!localStorage.getItem('llk_push_enabled')) return; // user belum aktifkan
   try{
@@ -1174,7 +1172,7 @@ async function scheduleReminderPush(studentName, isoDateTime, message){
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body: JSON.stringify({
-        title: `🎵 ${studentName} dalam 5 menit!`,
+        title: title,
         message: message||'',
         send_after: isoDateTime // format ISO, contoh: 2026-08-20T14:25:00+07:00
       })
@@ -1182,6 +1180,53 @@ async function scheduleReminderPush(studentName, isoDateTime, message){
   }catch(e){
     console.warn('scheduleReminderPush gagal (tidak fatal):', e);
   }
+}
+
+// Ambil pengaturan "berapa menit sebelum jadwal" (default 5 menit)
+function getNotifLeadMinutes(){
+  return parseInt(localStorage.getItem('llk_push_lead_minutes'))||5;
+}
+function fmtLeadLabel(min){
+  if(min<60) return min+' menit';
+  const h=min/60;
+  return (h===Math.floor(h)?h:h.toFixed(1))+' jam';
+}
+
+// Jadwalkan reminder push untuk SEMUA sesi hari ini yang masih akan datang
+// (belum lewat & belum ditandai hadir/izin/alpa), sesuai lead time pilihan user.
+// Dipanggil otomatis 1x/hari saat tab Absensi dibuka, atau manual lewat tombol
+// di Pengaturan Notifikasi.
+async function scheduleTodayReminders(showToast){
+  if(!pushNotifReady()||!localStorage.getItem('llk_push_enabled')){
+    if(showToast) toast('⚠️ Aktifkan notifikasi push dulu di atas');
+    return;
+  }
+  const dateKey=todayStr();
+  const now=new Date();
+  const dayName=DAYS[DAYS_JS.indexOf(now.getDay())];
+  const leadMin=getNotifLeadMinutes();
+  const list=getStudentsForDay(dayName,dateKey,false);
+  const dayAtt=attendance[dateKey]||{};
+  let count=0;
+  for(const s of list){
+    if(s._isExtra) continue; // MVP: sesi tambahan belum di-cover, cuma jadwal rutin/reschedule
+    if(!s.time) continue;
+    const status=dayAtt[s.name];
+    if(status==='hadir'||status==='izin'||status==='alpa') continue; // sudah ditandai, skip
+    const sessionStart=new Date(dateKey+'T'+s.time+':00');
+    if(isNaN(sessionStart.getTime())) continue;
+    const reminderAt=new Date(sessionStart.getTime()-leadMin*60000);
+    if(reminderAt<=now) continue; // sudah lewat waktunya, skip
+    await scheduleReminderPush(
+      `🎵 ${s.name} dalam ${fmtLeadLabel(leadMin)}!`,
+      `Jadwal jam ${s.time}`,
+      reminderAt.toISOString()
+    );
+    count++;
+  }
+  localStorage.setItem('llk_push_scheduled_date', dateKey);
+  if(showToast) toast(count>0?`✅ ${count} reminder dijadwalkan hari ini`:'ℹ️ Tidak ada sesi tersisa buat dijadwalkan');
+  return count;
 }
 
 let notifTimer;
@@ -1484,6 +1529,10 @@ function selectDay(d){
 function renderAbsensi(){
   const todayKey=todayStr();
   const isToday=selectedDay===todayDayName();
+  // Auto-jadwalkan reminder push 1x/hari begitu tab Absensi dibuka untuk hari ini
+  if(isToday&&localStorage.getItem('llk_push_enabled')&&localStorage.getItem('llk_push_scheduled_date')!==todayKey){
+    scheduleTodayReminders(false);
+  }
   // Gunakan tanggal aktual hari yang dipilih, bukan selalu hari ini
   const dayDiff=getDayDiff(selectedDay);
   const isPast=dayDiff<0;
@@ -5177,6 +5226,24 @@ function renderNotifSettings(){
           style="width:100%;padding:12px;background:${localStorage.getItem('llk_push_enabled')?'var(--hadir)':'var(--red)'};color:#fff;border:none;border-radius:10px;font-family:sans-serif;font-size:0.85rem;font-weight:700;cursor:pointer">
           ${localStorage.getItem('llk_push_enabled')?'✓ Notifikasi Aktif':'🔔 Aktifkan Notifikasi Push'}
         </button>
+      </div>
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:16px;margin-bottom:16px">
+        <div style="font-size:0.72rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:10px">⏱️ Waktu Reminder</div>
+        <div style="font-size:0.78rem;color:var(--muted);margin-bottom:12px;line-height:1.5">Ingatkan berapa lama sebelum jadwal sesi dimulai.</div>
+        <select id="notifLeadTime" onchange="localStorage.setItem('llk_push_lead_minutes',this.value);toast('✅ Waktu reminder disimpan');scheduleTodayReminders(false)"
+          style="width:100%;padding:12px;border-radius:10px;border:1.5px solid var(--border);background:var(--card2);color:var(--text);font-family:sans-serif;font-size:0.85rem;margin-bottom:12px">
+          <option value="5" ${getNotifLeadMinutes()===5?'selected':''}>5 menit sebelumnya</option>
+          <option value="10" ${getNotifLeadMinutes()===10?'selected':''}>10 menit sebelumnya</option>
+          <option value="15" ${getNotifLeadMinutes()===15?'selected':''}>15 menit sebelumnya</option>
+          <option value="30" ${getNotifLeadMinutes()===30?'selected':''}>30 menit sebelumnya</option>
+          <option value="60" ${getNotifLeadMinutes()===60?'selected':''}>1 jam sebelumnya</option>
+          <option value="120" ${getNotifLeadMinutes()===120?'selected':''}>2 jam sebelumnya</option>
+        </select>
+        <button onclick="scheduleTodayReminders(true)"
+          style="width:100%;padding:11px;background:var(--card2);color:var(--text);border:1.5px solid var(--border);border-radius:10px;font-family:sans-serif;font-size:0.82rem;font-weight:700;cursor:pointer">
+          🔄 Jadwalkan Ulang Reminder Hari Ini
+        </button>
+        <div style="font-size:0.65rem;color:var(--muted);margin-top:8px;line-height:1.5">Reminder hari ini terjadwal otomatis begitu tab Absensi dibuka. Tombol ini buat jadwalkan ulang manual (misal setelah ganti waktu reminder atau ubah jadwal siswa).</div>
       </div>
       <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:16px;margin-bottom:16px">
         <div style="font-size:0.72rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:12px">Pilih Suara</div>
