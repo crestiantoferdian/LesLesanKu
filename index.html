@@ -28,6 +28,16 @@
     OneSignalDeferred.push(async function(OneSignal) {
       await OneSignal.init({ appId: ONESIGNAL_APP_ID });
       window._oneSignalReady = true; // dipakai pushNotifReady() — lebih akurat dari cek typeof
+      // Simpan Subscription ID device INI (bukan device lain) supaya reminder
+      // nanti bisa ditarget cuma ke device ini — bukan broadcast ke semua user LLK.
+      function syncSubId(){
+        try{
+          const id = OneSignal.User.PushSubscription.id;
+          if(id) localStorage.setItem('llk_push_subscription_id', id);
+        }catch(e){}
+      }
+      syncSubId();
+      OneSignal.User.PushSubscription.addEventListener('change', syncSubId);
     });
   }
 </script>
@@ -1151,6 +1161,10 @@ async function enablePushNotif(){
       const granted = OneSignal.Notifications.permission;
       if(granted){
         localStorage.setItem('llk_push_enabled','1');
+        try{
+          const id = OneSignal.User.PushSubscription.id;
+          if(id) localStorage.setItem('llk_push_subscription_id', id);
+        }catch(e){}
         toast('✅ Notifikasi push aktif!');
       }else{
         toast('❌ Izin notifikasi ditolak — bisa diaktifkan lagi lewat pengaturan HP');
@@ -1176,6 +1190,13 @@ async function scheduleReminderPush(title, message, isoDateTime){
     console.warn('scheduleReminderPush dibatalkan: user belum aktifkan notifikasi push');
     return false;
   }
+  // Wajib ada Subscription ID device ini — supaya reminder cuma nyampe ke
+  // HP/browser kamu sendiri, bukan broadcast ke semua user LLK yang lain.
+  const subscriptionId = localStorage.getItem('llk_push_subscription_id');
+  if(!subscriptionId){
+    console.warn('scheduleReminderPush dibatalkan: subscription ID device ini belum tersedia — coba klik ulang "Aktifkan Notifikasi Push", tunggu beberapa detik, lalu coba lagi.');
+    return false;
+  }
   try{
     const res = await fetch(NOTIF_BRIDGE_URL, {
       method:'POST',
@@ -1183,7 +1204,8 @@ async function scheduleReminderPush(title, message, isoDateTime){
       body: JSON.stringify({
         title: title,
         message: message||'',
-        send_after: isoDateTime // format ISO, contoh: 2026-08-20T14:25:00.000Z
+        send_after: isoDateTime, // format ISO, contoh: 2026-08-20T14:25:00.000Z
+        subscriptionId: subscriptionId // target device ini SAJA
       })
     });
     const result = await res.json().catch(()=>({}));
