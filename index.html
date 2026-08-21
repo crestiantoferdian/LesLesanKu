@@ -1149,7 +1149,15 @@ function pushNotifReady(){
   return !!window._oneSignalReady && NOTIF_BRIDGE_URL.indexOf('GANTI_DENGAN')!==0;
 }
 
-// Dipanggil dari tombol "Aktifkan Notifikasi Push" di Pengaturan Notifikasi
+// Dipanggil dari tombol "Aktifkan/Nonaktifkan Notifikasi Push" di Pengaturan Notifikasi
+async function togglePushNotif(){
+  if(localStorage.getItem('llk_push_enabled')){
+    disablePushNotif();
+  }else{
+    enablePushNotif();
+  }
+}
+
 async function enablePushNotif(){
   if(typeof OneSignalDeferred==='undefined'){
     toast('⚠️ Push notification belum di-setup — lihat catatan di index.html');
@@ -1175,6 +1183,16 @@ async function enablePushNotif(){
     console.warn('enablePushNotif error:', e);
     toast('❌ Gagal mengaktifkan — cek console');
   }
+}
+
+// Nonaktifkan reminder push di LLK (device ini saja). Tidak mencabut izin
+// notifikasi browser — cuma matikan penjadwalan reminder dari sisi LLK,
+// supaya gampang diaktifkan lagi kapan saja tanpa minta izin ulang.
+function disablePushNotif(){
+  localStorage.removeItem('llk_push_enabled');
+  localStorage.removeItem('llk_push_scheduled_date');
+  toast('🔕 Notifikasi push dinonaktifkan');
+  renderNotifSettings();
 }
 
 // Kirim permintaan ke "jembatan" (Cloudflare Worker) supaya OneSignal
@@ -5273,9 +5291,9 @@ function renderNotifSettings(){
       <div style="background:${localStorage.getItem('llk_push_enabled')?'var(--hadir-bg)':'#fff5f5'};border:1.5px solid ${localStorage.getItem('llk_push_enabled')?'var(--hadir)':'var(--red)'};border-radius:16px;padding:16px;margin-bottom:16px">
         <div style="font-size:0.72rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px">🔔 Notifikasi Latar Belakang (Push)</div>
         <div style="font-size:0.8rem;color:var(--text);margin-bottom:12px;line-height:1.5">${localStorage.getItem('llk_push_enabled')?'Aktif — reminder tetap masuk walau LLK ditutup total.':'Belum aktif — reminder cuma jalan kalau LLK sedang dibuka.'}</div>
-        <button onclick="enablePushNotif()"
+        <button onclick="togglePushNotif()"
           style="width:100%;padding:12px;background:${localStorage.getItem('llk_push_enabled')?'var(--hadir)':'var(--red)'};color:#fff;border:none;border-radius:10px;font-family:sans-serif;font-size:0.85rem;font-weight:700;cursor:pointer">
-          ${localStorage.getItem('llk_push_enabled')?'✓ Notifikasi Aktif':'🔔 Aktifkan Notifikasi Push'}
+          ${localStorage.getItem('llk_push_enabled')?'✓ Notifikasi Aktif (klik untuk nonaktifkan)':'🔔 Aktifkan Notifikasi Push'}
         </button>
       </div>
       <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:16px;margin-bottom:16px">
