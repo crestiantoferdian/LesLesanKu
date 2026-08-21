@@ -1168,6 +1168,7 @@ async function enablePushNotif(){
       await OneSignal.Notifications.requestPermission();
       const granted = OneSignal.Notifications.permission;
       if(granted){
+        await OneSignal.User.PushSubscription.optIn(); // subscribe beneran di OneSignal
         localStorage.setItem('llk_push_enabled','1');
         try{
           const id = OneSignal.User.PushSubscription.id;
@@ -1185,14 +1186,23 @@ async function enablePushNotif(){
   }
 }
 
-// Nonaktifkan reminder push di LLK (device ini saja). Tidak mencabut izin
-// notifikasi browser — cuma matikan penjadwalan reminder dari sisi LLK,
-// supaya gampang diaktifkan lagi kapan saja tanpa minta izin ulang.
+// Nonaktifkan reminder push di LLK (device ini saja). Beneran opt-out dari
+// OneSignal (statusnya berubah jadi Unsubscribed di dashboard) — bukan cuma
+// flag di app. Bisa diaktifkan lagi kapan saja lewat optIn(), tanpa perlu
+// minta izin notifikasi browser dari awal lagi.
 function disablePushNotif(){
-  localStorage.removeItem('llk_push_enabled');
-  localStorage.removeItem('llk_push_scheduled_date');
-  toast('🔕 Notifikasi push dinonaktifkan');
-  renderNotifSettings();
+  if(typeof OneSignalDeferred==='undefined'){
+    localStorage.removeItem('llk_push_enabled');
+    renderNotifSettings();
+    return;
+  }
+  OneSignalDeferred.push(async function(OneSignal){
+    try{ await OneSignal.User.PushSubscription.optOut(); }catch(e){ console.warn('optOut error:', e); }
+    localStorage.removeItem('llk_push_enabled');
+    localStorage.removeItem('llk_push_scheduled_date');
+    toast('🔕 Notifikasi push dinonaktifkan');
+    renderNotifSettings();
+  });
 }
 
 // Kirim permintaan ke "jembatan" (Cloudflare Worker) supaya OneSignal
