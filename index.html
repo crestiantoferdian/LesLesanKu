@@ -27,6 +27,7 @@
   if(ONESIGNAL_APP_ID.indexOf('GANTI_DENGAN')!==0){
     OneSignalDeferred.push(async function(OneSignal) {
       await OneSignal.init({ appId: ONESIGNAL_APP_ID });
+      window._oneSignalReady = true; // dipakai pushNotifReady() — lebih akurat dari cek typeof
     });
   }
 </script>
@@ -1135,7 +1136,7 @@ checkNotifications();
 const NOTIF_BRIDGE_URL = "https://llk-onesignal-bridge.crestiantoferdian.workers.dev";
 
 function pushNotifReady(){
-  return typeof OneSignal!=='undefined' && NOTIF_BRIDGE_URL.indexOf('GANTI_DENGAN')!==0;
+  return !!window._oneSignalReady && NOTIF_BRIDGE_URL.indexOf('GANTI_DENGAN')!==0;
 }
 
 // Dipanggil dari tombol "Aktifkan Notifikasi Push" di Pengaturan Notifikasi
@@ -1164,21 +1165,41 @@ async function enablePushNotif(){
 
 // Kirim permintaan ke "jembatan" (Cloudflare Worker) supaya OneSignal
 // menjadwalkan 1 notifikasi terjadwal untuk sesi ini.
+// Return true kalau sukses, false kalau gagal (dan alasannya di-log ke console
+// supaya nggak gagal diam-diam tanpa jejak).
 async function scheduleReminderPush(title, message, isoDateTime){
-  if(!pushNotifReady()) return; // diam saja kalau belum di-setup, tidak bikin error
-  if(!localStorage.getItem('llk_push_enabled')) return; // user belum aktifkan
+  if(!pushNotifReady()){
+    console.warn('scheduleReminderPush dibatalkan: pushNotifReady()=false (OneSignal belum siap / URL worker belum diisi)');
+    return false;
+  }
+  if(!localStorage.getItem('llk_push_enabled')){
+    console.warn('scheduleReminderPush dibatalkan: user belum aktifkan notifikasi push');
+    return false;
+  }
   try{
-    await fetch(NOTIF_BRIDGE_URL, {
+    const res = await fetch(NOTIF_BRIDGE_URL, {
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body: JSON.stringify({
         title: title,
         message: message||'',
-        send_after: isoDateTime // format ISO, contoh: 2026-08-20T14:25:00+07:00
+        send_after: isoDateTime // format ISO, contoh: 2026-08-20T14:25:00.000Z
       })
     });
+    const result = await res.json().catch(()=>({}));
+    if(!res.ok){
+      console.error('scheduleReminderPush GAGAL — worker/OneSignal menolak:', res.status, result);
+      return false;
+    }
+    if(result.warning){
+      console.warn('scheduleReminderPush — request diterima TAPI ada peringatan:', result.warning, result);
+      return false; // jangan hitung sebagai sukses kalau 0 penerima
+    }
+    console.log('scheduleReminderPush sukses:', title, isoDateTime, result);
+    return true;
   }catch(e){
-    console.warn('scheduleReminderPush gagal (tidak fatal):', e);
+    console.error('scheduleReminderPush gagal (network/CORS):', e);
+    return false;
   }
 }
 
@@ -1194,11 +1215,13 @@ function fmtLeadLabel(min){
 
 // Jadwalkan reminder push untuk SEMUA sesi hari ini yang masih akan datang
 // (belum lewat & belum ditandai hadir/izin/alpa), sesuai lead time pilihan user.
+// Cover jadwal rutin, reschedule, DAN sesi Tambahan Kelas (extra).
 // Dipanggil otomatis 1x/hari saat tab Absensi dibuka, atau manual lewat tombol
 // di Pengaturan Notifikasi.
 async function scheduleTodayReminders(showToast){
   if(!pushNotifReady()||!localStorage.getItem('llk_push_enabled')){
     if(showToast) toast('⚠️ Aktifkan notifikasi push dulu di atas');
+    console.warn('scheduleTodayReminders dibatalkan — pushNotifReady:',pushNotifReady(),'enabled:',!!localStorage.getItem('llk_push_enabled'));
     return;
   }
   const dateKey=todayStr();
@@ -1206,26 +1229,32 @@ async function scheduleTodayReminders(showToast){
   const dayName=DAYS[DAYS_JS.indexOf(now.getDay())];
   const leadMin=getNotifLeadMinutes();
   const list=getStudentsForDay(dayName,dateKey,false);
-  const dayAtt=attendance[dateKey]||{};
-  let count=0;
+  console.log(`scheduleTodayReminders: ${list.length} sesi ditemukan untuk ${dayName} ${dateKey}`, list.map(s=>s.name+(s._isExtra?' (extra)':'')));
+  let count=0, skipped=[];
   for(const s of list){
-    if(s._isExtra) continue; // MVP: sesi tambahan belum di-cover, cuma jadwal rutin/reschedule
-    if(!s.time) continue;
-    const status=dayAtt[s.name];
-    if(status==='hadir'||status==='izin'||status==='alpa') continue; // sudah ditandai, skip
+    if(!s.time){ skipped.push(s.name+': tidak ada jam'); continue; }
+    const attKey=s._attKey||s.name; // sesi extra pakai key beda (name_extra_N)
+    const attDateKey=s._extraDate||dateKey;
+    const status=(attendance[attDateKey]||{})[attKey];
+    if(status==='hadir'||status==='izin'||status==='alpa'){ skipped.push(s.name+': sudah ditandai '+status); continue; }
     const sessionStart=new Date(dateKey+'T'+s.time+':00');
-    if(isNaN(sessionStart.getTime())) continue;
+    if(isNaN(sessionStart.getTime())){ skipped.push(s.name+': format jam tidak valid ('+s.time+')'); continue; }
     const reminderAt=new Date(sessionStart.getTime()-leadMin*60000);
-    if(reminderAt<=now) continue; // sudah lewat waktunya, skip
-    await scheduleReminderPush(
+    if(reminderAt<=now){ skipped.push(s.name+': waktu reminder sudah lewat'); continue; }
+    const ok=await scheduleReminderPush(
       `🎵 ${s.name} dalam ${fmtLeadLabel(leadMin)}!`,
       `Jadwal jam ${s.time}`,
       reminderAt.toISOString()
     );
-    count++;
+    if(ok) count++;
   }
+  if(skipped.length) console.log('scheduleTodayReminders — sesi yang di-skip:', skipped);
   localStorage.setItem('llk_push_scheduled_date', dateKey);
-  if(showToast) toast(count>0?`✅ ${count} reminder dijadwalkan hari ini`:'ℹ️ Tidak ada sesi tersisa buat dijadwalkan');
+  if(showToast){
+    if(count>0) toast(`✅ ${count} reminder dijadwalkan hari ini`);
+    else if(skipped.length) toast(`ℹ️ 0 dijadwalkan — cek console (F12) buat lihat alasannya`);
+    else toast('ℹ️ Tidak ada sesi hari ini');
+  }
   return count;
 }
 
