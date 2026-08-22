@@ -21,6 +21,30 @@
      LLK error, jadi nggak masalah kalau belum sempat malam ini.
 -->
 <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
+
+<!-- ═══ FIREBASE (LOGIN GOOGLE + BACKUP CLOUD) ═══
+  Setup yang perlu dilakukan sekali di Firebase Console (console.firebase.google.com):
+  1. Buat project baru (gratis, plan Spark cukup untuk skala solo tutor).
+  2. Authentication → Sign-in method → aktifkan "Google".
+  3. Authentication → Settings → Authorized domains → tambahkan domain GitHub Pages-mu
+     (crestiantoferdian.github.io) supaya redirect login tidak ditolak.
+  4. Firestore Database → Create database → mode production, region terdekat (asia-southeast).
+  5. Firestore → Rules, ganti isinya jadi (supaya user cuma bisa baca/tulis datanya sendiri):
+       rules_version = '2';
+       service cloud.firestore {
+         match /databases/{database}/documents {
+           match /backups/{uid} {
+             allow read, write: if request.auth != null && request.auth.uid == uid;
+           }
+         }
+       }
+  6. Project settings → General → scroll ke "Your apps" → tambah Web App → copy config-nya
+     ke FIREBASE_CONFIG di bawah ini (ganti semua nilai GANTI_DENGAN_...).
+-->
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+
 <script>
   window.OneSignalDeferred = window.OneSignalDeferred || [];
   const ONESIGNAL_APP_ID = "a19b07d7-696d-4f0f-abb5-07320509dadb";
@@ -496,6 +520,23 @@ body{
 </head>
 <body>
 
+<!-- ═══ LOGIN GATE ═══ tampil di atas segalanya sampai user login atau pilih lewati -->
+<div id="loginGate" style="position:fixed;inset:0;z-index:9999;background:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px;text-align:center;font-family:-apple-system,BlinkMacSystemFont,sans-serif">
+  <div style="font-size:2.4rem;margin-bottom:4px">🎵</div>
+  <div style="font-size:1.3rem;font-weight:800;color:#1c1c1e;margin-bottom:6px">LesLesanKu</div>
+  <div id="loginGateMsg" style="font-size:0.85rem;color:#6b7280;margin-bottom:28px;max-width:320px;line-height:1.6">
+    Login dengan akun Google supaya data absensi &amp; siswa kamu otomatis tersimpan di akun ini — kalau ganti HP, tinggal login lagi dan semua data langsung kembali.
+  </div>
+  <button id="loginGateBtn" onclick="loginWithGoogle()" style="width:100%;max-width:320px;padding:14px;background:#1c1c1e;color:#fff;border:none;border-radius:12px;font-size:0.9rem;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px">
+    <svg width="18" height="18" viewBox="0 0 18 18"><path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.9c1.7-1.56 2.7-3.87 2.7-6.62z"/><path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.9-2.26c-.8.54-1.84.86-3.06.86-2.35 0-4.34-1.59-5.05-3.72H.98v2.33A9 9 0 0 0 9 18z"/><path fill="#FBBC05" d="M3.95 10.7A5.4 5.4 0 0 1 3.66 9c0-.59.1-1.17.28-1.7V4.97H.98A9 9 0 0 0 0 9c0 1.45.35 2.83.98 4.03l2.97-2.33z"/><path fill="#EA4335" d="M9 3.58c1.32 0 2.5.45 3.44 1.35l2.58-2.58C13.46.89 11.43 0 9 0A9 9 0 0 0 .98 4.97l2.97 2.33C4.66 5.17 6.65 3.58 9 3.58z"/></svg>
+    Login dengan Google
+  </button>
+  <button id="loginGateSkip" onclick="skipLoginGate()" style="margin-top:12px;background:none;border:none;color:#9ca3af;font-size:0.78rem;cursor:pointer;text-decoration:underline">
+    Lewati untuk sekarang (data hanya tersimpan di HP ini)
+  </button>
+  <div id="loginGateStatus" style="margin-top:18px;font-size:0.78rem;color:#9ca3af"></div>
+</div>
+
 <div class="app-header">
   <div class="header-logo" id="schoolLogo">LLK</div>
   <div class="header-info">
@@ -929,6 +970,8 @@ function save(){
   localStorage.setItem('rms4_meta',JSON.stringify(attMeta));
   localStorage.setItem('rms4_links',JSON.stringify(quickLinks));
   localStorage.setItem('rms4_tasks',JSON.stringify(teacherTasks));
+  // Tiap kali data lokal berubah, jadwalkan sync ke cloud (lihat blok FIREBASE di akhir file)
+  if(typeof scheduleCloudSync==='function') scheduleCloudSync();
 }
 function loadStorage(){
   try{students=JSON.parse(localStorage.getItem('rms4_s')||'[]');}catch(e){students=[];}
@@ -1145,6 +1188,54 @@ checkNotifications();
 // GANTI dengan URL Cloudflare Worker kamu (lihat file onesignal-bridge-worker.js)
 const NOTIF_BRIDGE_URL = "https://llk-onesignal-bridge.crestiantoferdian.workers.dev";
 
+// ── PEMBATALAN REMINDER YANG SUDAH TERLANJUR DIJADWALKAN ──────────────
+// Kenapa ini perlu: reminder dijadwalkan ke OneSignal 1x di awal hari (saat tab
+// Absensi dibuka) untuk SEMUA sesi hari itu yang belum ditandai. Kalau beberapa
+// jam kemudian muridnya ternyata izin (atau sesinya di-reschedule), reminder yang
+// SUDAH terlanjur dititip ke server OneSignal itu TIDAK otomatis batal — makanya
+// tetap bunyi walau sudah ditandai izin. Fungsi di bawah ini menyimpan ID setiap
+// reminder yang berhasil dijadwalkan, supaya bisa dibatalkan begitu statusnya berubah.
+//
+// CATATAN PENTING: fungsi cancelReminderPush() di bawah butuh 1 endpoint BARU
+// di Cloudflare Worker kamu (onesignal-bridge-worker.js) yang meneruskan
+// pembatalan ke OneSignal. Selama endpoint itu belum ditambahkan di Worker,
+// pemanggilan cancelReminderPush() akan gagal dengan aman (cuma log warning,
+// tidak bikin app error) — jadi aman untuk deploy duluan.
+const PUSH_ID_STORE_KEY='llk_push_ids';
+function getPushIdMap(){
+  try{ return JSON.parse(localStorage.getItem(PUSH_ID_STORE_KEY)||'{}'); }catch(e){ return {}; }
+}
+function setPushId(pushKey, notifId){
+  const map=getPushIdMap();
+  map[pushKey]=notifId;
+  localStorage.setItem(PUSH_ID_STORE_KEY, JSON.stringify(map));
+}
+function popPushId(pushKey){
+  const map=getPushIdMap();
+  const id=map[pushKey];
+  if(id!==undefined){ delete map[pushKey]; localStorage.setItem(PUSH_ID_STORE_KEY, JSON.stringify(map)); }
+  return id;
+}
+// Batalkan reminder yang sudah terjadwal untuk 1 sesi hari ini (kalau ada).
+// Dipanggil otomatis setiap kali: (1) status sesi ditandai hadir/izin/alpa,
+// (2) sesi hari ini di-reschedule pindah ke hari/tanggal lain.
+async function cancelReminderPush(dateKey, attKey){
+  const pushKey=dateKey+'|'+attKey;
+  const notifId=popPushId(pushKey);
+  if(!notifId) return; // tidak ada reminder terjadwal untuk sesi ini — tidak perlu apa-apa
+  try{
+    const res=await fetch(NOTIF_BRIDGE_URL, {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ action:'cancel', notificationId:notifId })
+    });
+    if(res.ok) console.log('Reminder dibatalkan untuk', pushKey, notifId);
+    else console.warn('Gagal batalkan reminder (worker belum dukung action:cancel?) — status',res.status,'untuk',pushKey);
+  }catch(e){
+    console.warn('Gagal batalkan reminder (network):', e);
+  }
+}
+
 function pushNotifReady(){
   return !!window._oneSignalReady && NOTIF_BRIDGE_URL.indexOf('GANTI_DENGAN')!==0;
 }
@@ -1209,7 +1300,7 @@ function disablePushNotif(){
 // menjadwalkan 1 notifikasi terjadwal untuk sesi ini.
 // Return true kalau sukses, false kalau gagal (dan alasannya di-log ke console
 // supaya nggak gagal diam-diam tanpa jejak).
-async function scheduleReminderPush(title, message, isoDateTime){
+async function scheduleReminderPush(title, message, isoDateTime, pushKey){
   if(!pushNotifReady()){
     console.warn('scheduleReminderPush dibatalkan: pushNotifReady()=false (OneSignal belum siap / URL worker belum diisi)');
     return false;
@@ -1245,6 +1336,9 @@ async function scheduleReminderPush(title, message, isoDateTime){
       console.warn('scheduleReminderPush — request diterima TAPI ada peringatan:', result.warning, result);
       return false; // jangan hitung sebagai sukses kalau 0 penerima
     }
+    // Simpan ID reminder ini supaya bisa dibatalkan otomatis kalau statusnya
+    // berubah (izin/hadir/alpa/reschedule) sebelum waktu bunyinya tiba.
+    if(pushKey && result.id) setPushId(pushKey, result.id);
     console.log('scheduleReminderPush sukses:', title, isoDateTime, result);
     return true;
   }catch(e){
@@ -1278,7 +1372,13 @@ async function scheduleTodayReminders(showToast){
   const now=new Date();
   const dayName=DAYS[DAYS_JS.indexOf(now.getDay())];
   const leadMin=getNotifLeadMinutes();
-  const list=getStudentsForDay(dayName,dateKey,false);
+  const list=getStudentsForDay(dayName,dateKey,false)
+    // BUGFIX: kartu "informational" yang cuma menandakan sesi sudah dipindah
+    // (reschedule ke tanggal lain, ATAU digeser jam di hari yang sama) TIDAK
+    // BOLEH ikut dijadwalkan reminder — sesi aslinya sudah tidak terjadi di
+    // slot ini. Sesi yang beneran mau berlangsung sudah dapat kartu terpisah
+    // (_isRescheduled:true) yang otomatis ikut lolos filter ini.
+    .filter(s=>!s._hasActiveReschedule && !s._sameday_reschedule);
   console.log(`scheduleTodayReminders: ${list.length} sesi ditemukan untuk ${dayName} ${dateKey}`, list.map(s=>s.name+(s._isExtra?' (extra)':'')));
   let count=0, skipped=[];
   for(const s of list){
@@ -1294,7 +1394,8 @@ async function scheduleTodayReminders(showToast){
     const ok=await scheduleReminderPush(
       `🎵 ${s.name} dalam ${fmtLeadLabel(leadMin)}!`,
       `Jadwal jam ${s.time}`,
-      reminderAt.toISOString()
+      reminderAt.toISOString(),
+      attDateKey+'|'+attKey
     );
     if(ok) count++;
   }
@@ -2426,6 +2527,9 @@ function saveNote(){
     const studentName=noteStudent.name; // this is attKey
     const displayName=noteStudent.displayName||studentName;
     attendance[dateKey][studentName]=status;
+    // Sesi ini sudah ditandai (hadir/izin/alpa) — batalkan reminder yang mungkin
+    // sudah terlanjur dijadwalkan untuk sesi ini hari ini, supaya tidak bunyi lagi.
+    cancelReminderPush(dateKey, studentName);
     // Simpan timestamp saat diabsen untuk sort "Terbaru"
     localStorage.setItem('llk_ts_'+dateKey+'_'+studentName, Date.now().toString());
     const noteKey=dateKey+'_'+studentName;
@@ -4478,6 +4582,7 @@ function renderLainnya(){
   document.getElementById('mainContent').innerHTML=
     `<div class="page-title-area"><div class="page-title">Lainnya</div><div class="page-sub">Pengaturan & manajemen data</div></div>
     <div class="lainnya-wrap">
+      <div id="accountSectionSlot"></div>
       <div class="menu-card">
         <div class="menu-item" onclick="openAdd()">
           <div class="menu-icon red">➕</div>
@@ -4524,8 +4629,9 @@ function renderLainnya(){
           <span class="menu-arrow">›</span>
         </div>
       </div>
-      <div style="text-align:center;padding:20px;font-size:0.72rem;color:var(--muted)">LesLesanKu · Aplikasi Manajemen Les<br>Data tersimpan di perangkat ini</div>
+      <div style="text-align:center;padding:20px;font-size:0.72rem;color:var(--muted)">LesLesanKu · Aplikasi Manajemen Les<br>Data tersimpan di perangkat ini${typeof currentUser!=='undefined'&&currentUser?' & tersinkron ke akun Google':''}</div>
     </div>`;
+  if(typeof renderAccountSection==='function') renderAccountSection();
 }
 
 function showAllStudents(){
@@ -5852,6 +5958,12 @@ function saveReschedule(){
     // Sesi Jadwal Tambahan: simpan sebagai "movedTo" — kartu asal tetap tampil dengan indikator pindah
     if(!s.extraDates||!s.extraDates[_rsExtraIdx]){ toast('❌ Sesi tambahan tidak ditemukan'); return; }
     s.extraDates[_rsExtraIdx].movedTo={date:date, time:time, time2:time2};
+    // Kalau sesi tambahan ini aslinya hari ini, batalkan reminder yang mungkin sudah terjadwal
+    const origDate=s.extraDates[_rsExtraIdx].date;
+    if(origDate===todayStr()){
+      const eid=s.extraDates[_rsExtraIdx].id!==undefined&&s.extraDates[_rsExtraIdx].id!==null?s.extraDates[_rsExtraIdx].id:_rsExtraIdx;
+      cancelReminderPush(todayStr(), s.name+'_extra_'+eid);
+    }
     save();
     closeRescheduleModal();
     render();
@@ -5864,6 +5976,8 @@ function saveReschedule(){
   s.reschedules=s.reschedules.filter(r=>r.day!==_rsDay);
   // Tambah yang baru
   s.reschedules.push({day:_rsDay, date:date, time:time, time2:time2});
+  // Kalau hari yang direschedule ini adalah HARI INI, batalkan reminder lama-nya
+  if(_rsDay===todayDayName()) cancelReminderPush(todayStr(), s.name);
   save();
   closeRescheduleModal();
   render();
@@ -5935,6 +6049,189 @@ function clearReschedule(){
 // sekarang "dipinjam" oleh OneSignalSDKWorker.js lewat importScripts(),
 // jadi cukup 1 service worker (punya OneSignal) yang mendaftar, supaya
 // tidak rebutan scope dengan push notification. Lihat OneSignalSDKWorker.js.
+</script>
+
+<script>
+// ══════════════════════════════════════════════════════════════════════
+// FIREBASE — LOGIN GOOGLE + BACKUP CLOUD OTOMATIS
+// ══════════════════════════════════════════════════════════════════════
+// GANTI nilai-nilai di bawah ini dengan config dari Firebase Console-mu
+// (Project settings → General → Your apps → Web app → SDK setup and config)
+const FIREBASE_CONFIG = {
+  apiKey: "GANTI_DENGAN_API_KEY",
+  authDomain: "GANTI_DENGAN_PROJECT_ID.firebaseapp.com",
+  projectId: "GANTI_DENGAN_PROJECT_ID",
+  storageBucket: "GANTI_DENGAN_PROJECT_ID.appspot.com",
+  messagingSenderId: "GANTI_DENGAN_SENDER_ID",
+  appId: "GANTI_DENGAN_APP_ID"
+};
+
+let fbApp=null, fbAuth=null, fbDb=null, currentUser=null;
+let _cloudSyncTimer=null;
+let _cloudPulling=false; // true selagi lagi menarik data dari cloud, supaya save() yg terpicu saat itu tidak balik ngirim ke cloud
+
+function initFirebase(){
+  if(FIREBASE_CONFIG.apiKey.startsWith('GANTI_DENGAN')){
+    // Belum di-setup — sembunyikan gate, app tetap jalan 100% lokal seperti sebelumnya.
+    document.getElementById('loginGate').style.display='none';
+    return;
+  }
+  fbApp=firebase.initializeApp(FIREBASE_CONFIG);
+  fbAuth=firebase.auth();
+  fbDb=firebase.firestore();
+
+  // Selesaikan proses login kalau baru saja kembali dari redirect Google
+  fbAuth.getRedirectResult().catch(function(err){
+    console.error('Redirect login error:',err);
+    setLoginGateStatus('⚠️ Login gagal: '+err.message);
+  });
+
+  fbAuth.onAuthStateChanged(function(user){
+    currentUser=user;
+    if(user){
+      document.getElementById('loginGate').style.display='none';
+      pullFromCloud();
+    } else if(localStorage.getItem('llk_skip_login')!=='1'){
+      document.getElementById('loginGate').style.display='flex';
+    }
+    renderAccountSection();
+  });
+}
+
+function setLoginGateStatus(msg){
+  const el=document.getElementById('loginGateStatus');
+  if(el) el.textContent=msg||'';
+}
+
+function loginWithGoogle(){
+  if(!fbAuth){ setLoginGateStatus('⚠️ Firebase belum di-setup.'); return; }
+  if(!navigator.onLine){ setLoginGateStatus('⚠️ Perlu internet buat login pertama kali.'); return; }
+  setLoginGateStatus('Membuka login Google…');
+  const provider=new firebase.auth.GoogleAuthProvider();
+  // signInWithRedirect (bukan popup) — jauh lebih reliable di dalam TWA/APK
+  // karena TWA tidak selalu mendukung popup window.
+  fbAuth.signInWithRedirect(provider);
+}
+
+function skipLoginGate(){
+  localStorage.setItem('llk_skip_login','1');
+  document.getElementById('loginGate').style.display='none';
+}
+
+function logoutFirebase(){
+  if(!fbAuth) return;
+  fbAuth.signOut().then(function(){
+    currentUser=null;
+    localStorage.removeItem('llk_skip_login');
+    toast('👋 Berhasil logout. Data di HP ini tetap ada.');
+    renderAccountSection();
+  });
+}
+
+// Bundel data yang sama persis dengan yang dipakai fitur "Backup Manual" (exportData),
+// supaya cloud sync & backup manual selalu konsisten formatnya.
+function buildCloudBundle(){
+  return {
+    students,attendance,attNotes,attMeta,quickLinks,teacherTasks,
+    misc:collectPrefixedData(),
+    settings:collectSettingsData(),
+    updatedAt:firebase.firestore.FieldValue.serverTimestamp(),
+    updatedAtLocal:new Date().toISOString(),
+    version:'6'
+  };
+}
+
+function scheduleCloudSync(){
+  if(!fbDb||!currentUser||_cloudPulling) return; // belum login / lagi proses tarik data dari cloud
+  clearTimeout(_cloudSyncTimer);
+  // Debounce 4 detik: nunggu user selesai beberapa aksi beruntun sebelum kirim,
+  // supaya tidak spam write ke Firestore tiap ketukan.
+  _cloudSyncTimer=setTimeout(pushToCloud,4000);
+}
+
+function pushToCloud(){
+  if(!fbDb||!currentUser) return;
+  fbDb.collection('backups').doc(currentUser.uid).set(buildCloudBundle())
+    .then(function(){ setCloudSyncStatus('✅ Tersimpan ke cloud • '+new Date().toLocaleTimeString('id-ID')); })
+    .catch(function(err){
+      console.error('Gagal sync ke cloud:',err);
+      setCloudSyncStatus('⚠️ Gagal sync ke cloud (offline?) — dicoba lagi otomatis nanti.');
+    });
+}
+
+function pullFromCloud(){
+  if(!fbDb||!currentUser) return;
+  setLoginGateStatus('Mengambil data dari akunmu…');
+  fbDb.collection('backups').doc(currentUser.uid).get().then(function(doc){
+    if(doc.exists){
+      const proceedPull=function(){
+        _cloudPulling=true;
+        const data=doc.data();
+        localStorage.setItem('rms4_s',JSON.stringify(data.students||[]));
+        localStorage.setItem('rms4_a',JSON.stringify(data.attendance||{}));
+        localStorage.setItem('rms4_n',JSON.stringify(data.attNotes||{}));
+        localStorage.setItem('rms4_meta',JSON.stringify(data.attMeta||{}));
+        localStorage.setItem('rms4_links',JSON.stringify(data.quickLinks||[]));
+        localStorage.setItem('rms4_tasks',JSON.stringify(data.teacherTasks||[]));
+        restorePrefixedData(data.misc||{});
+        restoreSettingsData(data.settings||{});
+        loadStorage();
+        applySettings();
+        render();
+        renderAccountSection();
+        _cloudPulling=false;
+        toast('☁️ Data dari akunmu berhasil dimuat!');
+      };
+      // Kalau HP ini sudah punya data lokal duluan (misal sempat dipakai offline
+      // sebelum login), jangan langsung ditimpa diam-diam — konfirmasi dulu ke user
+      // supaya tidak kehilangan data tanpa sadar.
+      const hasLocalData=(students&&students.length>0);
+      if(hasLocalData){
+        if(confirm('Akun ini sudah punya data tersimpan di cloud. Timpa data di HP ini dengan data dari cloud?\n\n(Kalau data di HP ini penting & belum ke-backup, tekan Batal dulu lalu backup manual dari tab Lainnya.)')){
+          proceedPull();
+        } else {
+          setLoginGateStatus('');
+        }
+      } else {
+        proceedPull();
+      }
+    } else {
+      // Belum ada data di cloud sama sekali → ini login pertama kali, kirim data lokal (kalau ada) ke cloud
+      pushToCloud();
+    }
+  }).catch(function(err){
+    console.error('Gagal ambil data cloud:',err);
+    setLoginGateStatus('⚠️ Gagal ambil data dari cloud: '+err.message);
+  });
+}
+
+function setCloudSyncStatus(msg){
+  const el=document.getElementById('cloudSyncStatus');
+  if(el) el.textContent=msg;
+}
+
+// Dipanggil dari renderLainnya() untuk menampilkan status akun & tombol login/logout
+function renderAccountSection(){
+  const el=document.getElementById('accountSectionSlot');
+  if(!el) return;
+  if(currentUser){
+    el.innerHTML=
+      '<div style="display:flex;align-items:center;gap:10px;padding:12px;background:#f2f2f7;border-radius:12px;margin-bottom:10px">'+
+        (currentUser.photoURL?'<img src="'+currentUser.photoURL+'" style="width:36px;height:36px;border-radius:50%">':'<div style="width:36px;height:36px;border-radius:50%;background:#1c1c1e;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700">'+(currentUser.displayName||'U').charAt(0)+'</div>')+
+        '<div style="flex:1;min-width:0"><div style="font-weight:700;font-size:0.85rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(currentUser.displayName||'')+'</div>'+
+        '<div style="font-size:0.72rem;color:#6b7280;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(currentUser.email||'')+'</div>'+
+        '<div id="cloudSyncStatus" style="font-size:0.68rem;color:#9ca3af;margin-top:2px">Tersinkron otomatis</div></div>'+
+        '<button onclick="logoutFirebase()" style="background:none;border:1px solid #e5e5ea;border-radius:8px;padding:6px 10px;font-size:0.72rem;color:#dc2626;cursor:pointer">Logout</button>'+
+      '</div>';
+  } else {
+    el.innerHTML=
+      '<button onclick="document.getElementById(\'loginGate\').style.display=\'flex\'" style="width:100%;padding:12px;background:#1c1c1e;color:#fff;border:none;border-radius:12px;font-size:0.82rem;font-weight:700;cursor:pointer;margin-bottom:10px">'+
+        '🔐 Login dengan Google (aktifkan cloud backup)'+
+      '</button>';
+  }
+}
+
+initFirebase();
 </script>
 
 </body>
